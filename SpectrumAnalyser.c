@@ -769,9 +769,9 @@ void main(void) {
 
     EnableADC10(); // Enable the ADC
     ///////////////////////////////////////////////////////
-   // OpenTimer2(T2_ON | T2_SOURCE_INT | T2_PS_1_1, 40000);
-  //  OpenOC4(OC_ON | OC_TIMER2_SRC | OC_PWM_FAULT_PIN_DISABLE , 20000, 40000);
-  //  PPSOutput(	3	,	RPB13	,	OC4	    );// 
+   // OpenTimer2(T2_ON | T2_SOURCE_INT | T2_PS_1_256, sys_clock/256000);
+  //  OpenOC1(OC_ON | OC_TIMER2_SRC | OC_PWM_FAULT_PIN_DISABLE,sys_clock/512000 ,sys_clock/256000 );
+  //  PPSOutput(	1	,	RPA0	,	OC1	    );// 
     // timer 4 setup for profiling code ===========================================
     // Set up timer2 on,  interrupts, internal clock, prescalar 1, compare-value
     // This timer generates the time base for each horizontal video line
