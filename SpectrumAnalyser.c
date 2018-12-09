@@ -48,7 +48,7 @@ static short sin_table[sine_table_size], sin_table2[sine_table_size];
 typedef signed short fix14 ;
 #define RECORD_TIME 5
 int p =100/RECORD_TIME;
-int refresh =0;
+int refresh =1;
 #define multfix14(a,b) ((fix14)((((long)(a))*((long)(b)))>>14)) //multiply two fixed 2.14
 #define float2fix14(a) ((fix14)((a)*16384.0)) // 2^14
 #define fix2float14(a) ((float)(a)/16384.0)
@@ -67,6 +67,7 @@ static short x=20, y=0, ypow, ypow_1[Filter_bank_size], color;
 // system 1 second interval tick
 int sys_time_seconds ;
 int mel[22]={19,24,29,35,41,47,54,62,70,79,89,99,110,122,135,148,163,179,196,215,235,256};
+int freq[22]={300,376,458,547,642,745,856,975,1103,1241,1389,1549,1721,1906,2105,2320,2551,28001,3067,3355,3666,4000};
 int m=0;
 int bandData[20];
 int mode=0,prev_mode=0;
@@ -503,8 +504,8 @@ static PT_THREAD (protothread_fft(struct pt *pt))
                     tft_setTextSize(1);
                     for(k=0;k<22;k++){
                         tft_setCursor(0, 230-(10*k));
-                        sprintf(buffer, "%d", mel[k]);
-                        tft_writeString(print_buffer);
+                        sprintf(buffer, "%d", freq[k]);
+                        tft_writeString(buffer);
                     }
                         
                         
@@ -512,13 +513,14 @@ static PT_THREAD (protothread_fft(struct pt *pt))
                 else{
                     tft_setTextColor(ILI9340_WHITE); 
                     tft_setTextSize(1);
+                    tft_setRotation(0); 
                     for(k=0;k<22;k++){
-                        tft_setCursor(16*k, 235);
-                        sprintf(buffer, "%d", mel[k]);
-                        tft_writeString(print_buffer);
+                        tft_setCursor(0, 15*k);
+                        sprintf(buffer, "%d", freq[k]);
+                        tft_writeString(buffer);
             
                 }
-        
+        tft_setRotation(1); 
                 }
         
         }
@@ -566,7 +568,6 @@ else
     else
     color =0xF800;
             tft_fillRoundRect(x,230-(10*m), 1, 10, 1, color);// x,y,w,h,radius,color
-            ypow_1[m] = ypow;
 }
    
         
@@ -579,16 +580,16 @@ else if(prevbandData<bandData[m])
     tft_fillRect(m*16,prevbandData, 12, bandData[m]-prevbandData,ILI9340_RED);
        */ 
         
-            tft_fillRect((m-1)*16,0, 12,220,ILI9340_BLACK);
+            tft_fillRect((m-1)*16+2,0, 12,220,ILI9340_BLACK);
       
-        tft_fillRect((m-1)*16,220-bandData[m], 12,220,ILI9340_RED);
+        tft_fillRect((m-1)*16+2,210-bandData[m], 12,bandData[m],ILI9340_RED);
        
         }
 }
       
 if(mode) {  
     x++;
-    if (x>300) x=20 ;
+    if (x>300) x=30 ;
 }
  
         
@@ -599,13 +600,13 @@ if(mode) {
     mPORTBSetBits(BIT_8);
     tft_fillScreen(ILI9340_BLACK);
     tft_setTextColor(ILI9340_WHITE); 
-    tft_setTextSize(8);
-    tft_setCursor(100, 120);
+    tft_setTextSize(3);
+    tft_setCursor(70, 100);
     sprintf(buffer, "RECORDING");
-    tft_writeString(print_buffer);
+    tft_writeString(buffer);
     tft_fillRect(100,140, 100,10,ILI9340_WHITE);
 	for(frame_count=0;frame_count<16*RECORD_TIME;frame_count++){
-    tft_fillRect(100+((frame_count*p)>>4),140, 1,10,ILI9340_GREEN);
+    tft_fillRect(100+((frame_count*p)>>4),140, 1,10,ILI9340_RED);
 
     DmaChnEnable(0);
         // yield until DMA done: while((DCH0CON & Chn_busy) ){};
@@ -634,10 +635,10 @@ refresh=1;
 	    DmaChnSetEventControl(1, DMA_EV_START_IRQ(_TIMER_3_IRQ));
         tft_fillScreen(ILI9340_BLACK);
     tft_setTextColor(ILI9340_WHITE); 
-    tft_setTextSize(8);
-    tft_setCursor(100, 120);
+    tft_setTextSize(3);
+    tft_setCursor(85, 100);
     sprintf(buffer, "PLAYING");
-    tft_writeString(print_buffer);
+    tft_writeString(buffer);
        
     tft_fillRect(100,140, 100,10,ILI9340_WHITE);
 	for(frame_count=0;frame_count<16*RECORD_TIME;frame_count++){    
@@ -655,15 +656,15 @@ refresh=1;
          DmaChnEnable(1);      
         while(!(DmaChnGetEvFlags(1)&DMA_EV_BLOCK_DONE));            
         // delay_ms(1000/16);
-         DmaChnClrEvFlags(1, DMA_EV_BLOCK_DONE);
+        DmaChnClrEvFlags(1, DMA_EV_BLOCK_DONE);
         SpiChnOpen(spiChn, SPI_OPEN_ON | SPI_OPEN_MODE8 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV , spiClkDiv);
 
     }
   mPORTBClearBits(BIT_9);     
-      play=0;
-refresh=1;
-      DmaChnDisable(1);
-          DmaChnEnable(0);
+        play=0;
+        refresh=1;
+        DmaChnDisable(1);
+        DmaChnEnable(0);
     }    
         
          // NEVER exit while
@@ -762,9 +763,9 @@ void main(void) {
 
     EnableADC10(); // Enable the ADC
     ///////////////////////////////////////////////////////
-OpenTimer2(T2_ON | T2_SOURCE_INT | T2_PS_1_1, 40000);
-    OpenOC4(OC_ON | OC_TIMER2_SRC | OC_PWM_FAULT_PIN_DISABLE , 20000, 40000);
-    PPSOutput(	3	,	RPB13	,	OC4	    );// 
+   // OpenTimer2(T2_ON | T2_SOURCE_INT | T2_PS_1_1, 40000);
+  //  OpenOC4(OC_ON | OC_TIMER2_SRC | OC_PWM_FAULT_PIN_DISABLE , 20000, 40000);
+  //  PPSOutput(	3	,	RPB13	,	OC4	    );// 
     // timer 4 setup for profiling code ===========================================
     // Set up timer2 on,  interrupts, internal clock, prescalar 1, compare-value
     // This timer generates the time base for each horizontal video line
@@ -812,7 +813,7 @@ for(m= 1; m <= 20; m++) {
   // divide Fpb by 2, configure the I/O ports. Not using SS in this example
   // 8 bit transfer CKP=1 CKE=1
   // possibles SPI_OPEN_CKP_HIGH;   SPI_OPEN_SMP_END;  SPI_OPEN_CKE_REV
-  // For any given peripherial, you will need to match these
+  // For any given peripheral, you will need to match these
   SpiChnOpen(spiChn, SPI_OPEN_ON | SPI_OPEN_MODE8 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV , spiClkDiv);
  
   mPORTBSetPinsDigitalOut(BIT_10);
