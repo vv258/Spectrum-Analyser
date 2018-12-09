@@ -237,8 +237,8 @@ static PT_THREAD (protothread_fft(struct pt *pt))
         */
         // timer 4 set up with prescalar=8, 
         // hence mult reading by 8 to get machine cycles
-        sprintf(buffer, "FFT cycles %d", (ReadTimer4())*8);
-        printLine2(11, buffer, ILI9340_WHITE, ILI9340_BLACK);
+    //    sprintf(buffer, "FFT cycles %d", (ReadTimer4())*8);
+    //    printLine2(11, buffer, ILI9340_WHITE, ILI9340_BLACK);
         
         // Display on TFT
         // erase, then draw
@@ -284,10 +284,12 @@ static PT_THREAD (protothread_fft(struct pt *pt))
 	    //tft_drawFastVLine(sample_number, 0,  fr[sample_number], ILI9340_RED);
         }
       int startFreqIdx, centerFreqIdx, stopFreqIdx, magnitudeScale;   
-for(m= 1; m < =20; m++) {
+for(m= 1; m <= 20; m++) {
     startFreqIdx = mel[m-1];
      centerFreqIdx = mel[m];
      stopFreqIdx   = mel[m+1];
+     int prevbandData =bandData[m];
+     
 bandData[m]=0;
     for( sample_number = startFreqIdx; sample_number < centerFreqIdx; sample_number++){
         magnitudeScale = centerFreqIdx-startFreqIdx;
@@ -298,8 +300,12 @@ bandData[m]=0;
         magnitudeScale = centerFreqIdx-stopFreqIdx;
         bandData[m] += fr[sample_number]*(sample_number-stopFreqIdx)/magnitudeScale;
     }
-    
-    tft_fillRect(0,m*16,  bandData[m],12,ILI9340_RED);
+
+
+if(prevbandData>bandData[m])
+    tft_fillRect(m*16,bandData[m], 12,prevbandData-bandData[m],ILI9340_BLACK);
+else if(prevbandData<bandData[m])
+    tft_fillRect(m*16,prevbandData, 12, bandData[m]-prevbandData,ILI9340_RED);
     
 }
         
@@ -406,7 +412,9 @@ void main(void) {
     tft_fillScreen(ILI9340_BLACK);
     //240x320 vertical display
     tft_setRotation(1); // Use tft_setRotation(1) for 320x240
-
+for(m= 1; m <= 20; m++) {
+    bandData[m]=0;
+}
     // round-robin scheduler for threads
     while (1) {
         PT_SCHEDULE(protothread_fft(&pt_fft));
