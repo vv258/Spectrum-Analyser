@@ -149,6 +149,7 @@ bit 11-0 D11:D0: DAC Input Data bits. Bit x is ignored.
 // A-channel, 1x, active
 #define DAC_config_chan_A 0b0011000000000000
 char buffer[60];
+char print_buffer[30];
 void printLine(int line_number, char* print_buffer, short text_color, short back_color){
     // line number 0 to 31 
     /// !!! assumes tft_setRotation(0);
@@ -512,13 +513,13 @@ static PT_THREAD (protothread_fft(struct pt *pt))
                     tft_setTextColor(ILI9340_WHITE); 
                     tft_setTextSize(1);
                     for(k=0;k<22;k++){
-                        tft_setCursor(16*k, 235;
+                        tft_setCursor(16*k, 235);
                         sprintf(buffer, "%d", mel[k]);
                         tft_writeString(print_buffer);
             
                 }
         
-        
+                }
         
         }
         if(mode){
@@ -578,9 +579,9 @@ else if(prevbandData<bandData[m])
     tft_fillRect(m*16,prevbandData, 12, bandData[m]-prevbandData,ILI9340_RED);
        */ 
         
-            tft_fillRect(m*16,0, 12,220,ILI9340_BLACK);
+            tft_fillRect((m-1)*16,0, 12,220,ILI9340_BLACK);
       
-        tft_fillRect(m*16,220-bandData[m], 12,220,ILI9340_RED);
+        tft_fillRect((m-1)*16,220-bandData[m], 12,220,ILI9340_RED);
        
         }
 }
@@ -665,7 +666,7 @@ refresh=1;
           DmaChnEnable(0);
     }    
         
-        // NEVER exit while
+         // NEVER exit while
       } // END WHILE(1)
   PT_END(pt);
 } // FFT thread
@@ -761,7 +762,9 @@ void main(void) {
 
     EnableADC10(); // Enable the ADC
     ///////////////////////////////////////////////////////
-
+OpenTimer2(T2_ON | T2_SOURCE_INT | T2_PS_1_1, 40000);
+    OpenOC4(OC_ON | OC_TIMER2_SRC | OC_PWM_FAULT_PIN_DISABLE , 20000, 40000);
+    PPSOutput(	3	,	RPB13	,	OC4	    );// 
     // timer 4 setup for profiling code ===========================================
     // Set up timer2 on,  interrupts, internal clock, prescalar 1, compare-value
     // This timer generates the time base for each horizontal video line
@@ -843,4 +846,4 @@ INTClearFlag(INT_INT1);
     }
 } // main
 
-// === end  ====================================================== b
+// === end  ====================================================== 
