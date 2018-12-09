@@ -21,8 +21,7 @@
 #include <math.h>
 ////////////////////////////////////
 // DDS sine table
-#define sine_table_size 512
-static short sin_table[sine_table_size], sin_table2[sine_table_size];
+
 
 /* Demo code for interfacing TFT (ILI9340 controller) to PIC32
  * The library has been modified from a similar Adafruit library
@@ -47,16 +46,18 @@ static short sin_table[sine_table_size], sin_table2[sine_table_size];
 // === the fixed point macros ========================================
 typedef signed short fix14 ;
 #define RECORD_TIME 5
-int p =100/RECORD_TIME;
+
 int refresh =1;
 #define multfix14(a,b) ((fix14)((((long)(a))*((long)(b)))>>14)) //multiply two fixed 2.14
 #define float2fix14(a) ((fix14)((a)*16384.0)) // 2^14
 #define fix2float14(a) ((float)(a)/16384.0)
 #define absfix14(a) abs(a) 
 // === input arrays ==================================================
-#define nSamp 512
+#define nSamp 256
+#define sample_rate 16000
+#define RECORD_COUNT (sample_rate*RECORD_TIME/nSamp)
 #define nPixels 340
-fix14 v_in[nSamp] ;
+fix14 v_in[nSamp],v_in_temp[nSamp] ;
 #define Filter_bank_size 22
 // === thread structures ============================================
 // thread control structs
@@ -66,8 +67,10 @@ static short x=20, y=0, ypow, ypow_1[Filter_bank_size], color;
       static short color_index, display_phase ;
 // system 1 second interval tick
 int sys_time_seconds ;
-int mel[22]={19,24,29,35,41,47,54,62,70,79,89,99,110,122,135,148,163,179,196,215,235,256};
-int freq[22]={300,376,458,547,642,745,856,975,1103,1241,1389,1549,1721,1906,2105,2320,2551,28001,3067,3355,3666,4000};
+//int mel[22]={19,24,29,35,41,47,54,62,70,79,89,99,110,122,135,148,163,179,196,215,235,256};
+int freq[22]={300,376,458,547,642,745,856,975,1103,1241,1389,1549,1721,1906,2105,2320,2551,2800,3067,3355,3666,4000};
+int mel[22]={4,6,7,8,10,11,13,15,17,19,22,24,27,30,33,37,40,44,49,53,58,64};
+
 int m=0;
 int bandData[20];
 int mode=0,prev_mode=0;
@@ -302,8 +305,8 @@ int ram_read_byte_array(int addr, char* data, int count){
 
 //=== FFT ==============================================================
 // FFT
-#define N_WAVE          512    /* size of FFT 512 */
-#define LOG2_N_WAVE     9     /* log2(N_WAVE) 0 */
+#define N_WAVE          256    /* size of FFT 512 */
+#define LOG2_N_WAVE     8    /* log2(N_WAVE) 0 */
 #define begin {
 #define end }
 
@@ -387,17 +390,20 @@ static PT_THREAD (protothread_fft(struct pt *pt))
     display_phase = 0;
     while(1) {
         // yield time 1 second
-        PT_YIELD_TIME_msec(30);
+       // PT_YIELD_TIME_msec(30);
         
         if(!play && !record){
         
         // enable ADC DMA channel and get
         // 512 samples from ADC
-        DmaChnEnable(0);
         // yield until DMA done: while((DCH0CON & Chn_busy) ){};
         PT_WAIT_WHILE(pt, DCH0CON & CHN_BUSY);
-        // 
+        memcpy(v_in,v_in_temp,nSamp*2);
+        DmaChnEnable(0);
+
         // profile fft time
+         sprintf(buffer, "FFT time %dms", (ReadTimer4()*64)/40000);
+        printLine(1, buffer, ILI9340_WHITE, ILI9340_BLACK);    
         WriteTimer4(0);
         
         // compute and display fft
@@ -410,12 +416,12 @@ static PT_THREAD (protothread_fft(struct pt *pt))
         
         // do FFT
         FFTfix(fr, fi, LOG2_N_WAVE);
-        // get magnitude and log
+   /*     // get magnitude and log
         // The magnitude of the FFT is approximated as: 
         //   |amplitude|=max(|Re|,|Im|)+0.4*min(|Re|,|Im|). 
         // This approximation is accurate within about 4% rms.
         // https://en.wikipedia.org/wiki/Alpha_max_plus_beta_min_algorithm
-   /*     for (sample_number = 0; sample_number < nPixels; sample_number++) {  
+      for (sample_number = 0; sample_number < nPixels; sample_number++) {  
             // get the approx magnitude
             fr[sample_number] = abs(fr[sample_number]); //>>9
             fi[sample_number] = abs(fi[sample_number]);
@@ -441,7 +447,7 @@ static PT_THREAD (protothread_fft(struct pt *pt))
             // bound the noise at low amp
             if(fr[sample_number]<log_min) fr[sample_number] = log_min;
         }
-        */
+        
         // timer 4 set up with prescalar=8, 
         // hence mult reading by 8 to get machine cycles
     //    sprintf(buffer, "FFT cycles %d", (ReadTimer4())*8);
@@ -536,24 +542,23 @@ for(m= 1; m <= 20; m++) {
      centerFreqIdx = mel[m];
      stopFreqIdx   = mel[m+1];
      int prevbandData =bandData[m];
-     
+     int temp1=0,temp2=0;
 bandData[m]=0;
     for( sample_number = startFreqIdx; sample_number < centerFreqIdx; sample_number++){
-        magnitudeScale = centerFreqIdx-startFreqIdx;
-        bandData[m] += fr[sample_number]*(sample_number-startFreqIdx)/magnitudeScale;
+       // magnitudeScale = centerFreqIdx-startFreqIdx;
+        temp1 += fr[sample_number]*(sample_number-startFreqIdx);//magnitudeScale;
     }
-
     for( sample_number = centerFreqIdx; sample_number <= stopFreqIdx; sample_number++) {
-        magnitudeScale = centerFreqIdx-stopFreqIdx;
-        bandData[m] += fr[sample_number]*(sample_number-stopFreqIdx)/magnitudeScale;
+      //  magnitudeScale = centerFreqIdx-stopFreqIdx;
+       temp2 += fr[sample_number]*(sample_number-stopFreqIdx);///magnitudeScale;
     }
-
+bandData[m]=(temp1/(centerFreqIdx-startFreqIdx))+(temp2/(centerFreqIdx-stopFreqIdx));
 /*
 
     */
 
 if(mode){
-color_index=bandData[m]>>3;
+color_index=bandData[m]>>2;
         
 /*if(color_index< 10)
     color=color_index;
@@ -567,7 +572,8 @@ else
         color =color_map[color_index];
     else
     color =0xF800;
-            tft_fillRoundRect(x,230-(10*m), 1, 10, 1, color);// x,y,w,h,radius,color
+           // tft_fillRoundRect(x,230-(10*m), 1, 10, 1, color);// x,y,w,h,radius,color
+             tft_drawFastVLine(x    , 230-(10*m)  ,10, color); // Left
 }
    
         
@@ -591,8 +597,7 @@ if(mode) {
     x++;
     if (x>300) x=30 ;
 }
- 
-        
+  
     }
         
     else if(record){
@@ -605,14 +610,14 @@ if(mode) {
     sprintf(buffer, "RECORDING");
     tft_writeString(buffer);
     tft_fillRect(100,140, 100,10,ILI9340_WHITE);
-	for(frame_count=0;frame_count<16*RECORD_TIME;frame_count++){
-    tft_fillRect(100+((frame_count*p)>>4),140, 1,10,ILI9340_RED);
+	for(frame_count=0;frame_count<RECORD_COUNT;frame_count++){
+    tft_fillRect(100+(frame_count*100/RECORD_COUNT),140, 1,10,ILI9340_RED);
 
     DmaChnEnable(0);
         // yield until DMA done: while((DCH0CON & Chn_busy) ){};
     PT_WAIT_WHILE(pt, DCH0CON & CHN_BUSY);
-    
-    ram_write_byte_array(frame_count*512*2,(char *)v_in,512*2);    
+    memcpy(v_in,v_in_temp,nSamp*2);
+    ram_write_byte_array(frame_count*nSamp*2,(char *)v_in,nSamp*2);    
     //ram_read_byte_array(frame_count*512*2,(char *) sin_table2,512*2);
  /*int i;
         for(i=0;i<nSamp;i++)
@@ -639,16 +644,16 @@ refresh=1;
     tft_setCursor(85, 100);
     sprintf(buffer, "PLAYING");
     tft_writeString(buffer);
-       
+      
     tft_fillRect(100,140, 100,10,ILI9340_WHITE);
-	for(frame_count=0;frame_count<16*RECORD_TIME;frame_count++){    
-    tft_fillRect(100+((frame_count*p)>>4),140, 1,10,ILI9340_GREEN);
-        ram_read_byte_array(frame_count*512*2,(char *) v_in,512*2);
+	for(frame_count=0;frame_count<RECORD_COUNT;frame_count++){    
+    tft_fillRect(100+(frame_count*100/RECORD_COUNT),140, 1,10,ILI9340_GREEN);
+        ram_read_byte_array(frame_count*nSamp*2,(char *) v_in,nSamp*2);
       
         int i;
         for(i=0;i<nSamp;i++)
            // sprintf(buffer, "%x", v_in[i]);
-        v_in[i]=DAC_config_chan_A|(v_in[i]<<3);
+        v_in[i]=DAC_config_chan_A|(v_in[i]<<2);
         SpiChnOpen(SPI_CHANNEL2, SPI_OPEN_ON | SPI_OPEN_MODE16 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV | SPICON_FRMEN | SPICON_FRMPOL, 2);
           PPSOutput(4, RPB10, SS2);
 	
@@ -714,16 +719,17 @@ void main(void) {
     // Set up timer3 on,  no interrupts, internal clock, prescalar 1, compare-value
     // This timer generates the time base for each ADC sample. 
     // works at ??? Hz
-    #define sample_rate 8000
+  
     // 40 MHz PB clock rate
     #define timer_match 40000000/sample_rate
     OpenTimer3(T3_ON | T3_SOURCE_INT | T3_PS_1_1, timer_match); 
-    
+
+
     //=== DMA Channel 0 transfer ADC data to array v_in ================================
     // Open DMA Chan1 for later use sending video to TV
     #define DMAchan0 0
 	DmaChnOpen(DMAchan0, 0, DMA_OPEN_DEFAULT);
-    DmaChnSetTxfer(DMAchan0, (void*)&ADC1BUF0, (void*)v_in, 2, nSamp*2, 2); //512 16-bit integers
+    DmaChnSetTxfer(DMAchan0, (void*)&ADC1BUF0, (void*)v_in_temp, 2, nSamp*2, 2); //512 16-bit integers
     DmaChnSetEventControl(DMAchan0, DMA_EV_START_IRQ(28)); // 28 is ADC done
     // ==============================================================================
     
@@ -769,7 +775,7 @@ void main(void) {
     // timer 4 setup for profiling code ===========================================
     // Set up timer2 on,  interrupts, internal clock, prescalar 1, compare-value
     // This timer generates the time base for each horizontal video line
-    OpenTimer4(T4_ON | T4_SOURCE_INT | T4_PS_1_8, 0xffff);
+    OpenTimer4(T4_ON | T4_SOURCE_INT | T4_PS_1_64, 0xffff);
         
     // === init FFT data =====================================
     // one cycle sine table
@@ -838,7 +844,7 @@ PPSInput(4, INT1, RPA3);//PLAY
 ConfigINT1(EXT_INT_PRI_4 | FALLING_EDGE_INT | EXT_INT_ENABLE);
 INTClearFlag(INT_INT1);  
       //int i;
-  
+      DmaChnEnable(0);
      //RPB10 CHIP SELECT FOR DAC
 //RPA4  CHIP SELECT FOR RAM   
  // round-robin scheduler for threads
