@@ -46,6 +46,9 @@ static short sin_table[sine_table_size], sin_table2[sine_table_size];
 
 // === the fixed point macros ========================================
 typedef signed short fix14 ;
+#define RECORD_TIME 5
+int p =100/RECORD_TIME;
+int refresh =0;
 #define multfix14(a,b) ((fix14)((((long)(a))*((long)(b)))>>14)) //multiply two fixed 2.14
 #define float2fix14(a) ((fix14)((a)*16384.0)) // 2^14
 #define fix2float14(a) ((float)(a)/16384.0)
@@ -59,7 +62,7 @@ fix14 v_in[nSamp] ;
 // thread control structs
 // note that UART input and output are threads
 static struct pt pt_fft ;
-static short x=0, y=0, ypow, ypow_1[Filter_bank_size], color;
+static short x=20, y=0, ypow, ypow_1[Filter_bank_size], color;
       static short color_index, display_phase ;
 // system 1 second interval tick
 int sys_time_seconds ;
@@ -486,9 +489,38 @@ static PT_THREAD (protothread_fft(struct pt *pt))
         }
         prev_mode=mode;
         mode=mPORTBReadBits(BIT_3);
-        if(mode!=prev_mode)
+        if(mode!=prev_mode || refresh){
               tft_fillScreen(ILI9340_BLACK);
+            refresh=0;
+                int k=0;
+
+                if(mode){
+                    int m=0;
+                    for(m=0;m<32;m++)
+                    tft_fillRoundRect(305,225-(7*m), 15, 7, 1, color_map[m]);// x,y,w,h,radius,color
+                    tft_setTextColor(ILI9340_WHITE); 
+                    tft_setTextSize(1);
+                    for(k=0;k<22;k++){
+                        tft_setCursor(0, 230-(10*k));
+                        sprintf(buffer, "%d", mel[k]);
+                        tft_writeString(print_buffer);
+                    }
+                        
+                        
+                }
+                else{
+                    tft_setTextColor(ILI9340_WHITE); 
+                    tft_setTextSize(1);
+                    for(k=0;k<22;k++){
+                        tft_setCursor(16*k, 235;
+                        sprintf(buffer, "%d", mel[k]);
+                        tft_writeString(print_buffer);
+            
+                }
         
+        
+        
+        }
         if(mode){
  tft_fillRoundRect(x-1, 0, 3, 10, 1, ILI9340_BLACK);// x,y,w,h,radius,color
  tft_fillRoundRect(x, 0, 3, 10, 1, ILI9340_RED);// x,y,w,h,radius,color
@@ -546,16 +578,16 @@ else if(prevbandData<bandData[m])
     tft_fillRect(m*16,prevbandData, 12, bandData[m]-prevbandData,ILI9340_RED);
        */ 
         
-            tft_fillRect(m*16,0, 12,240,ILI9340_BLACK);
+            tft_fillRect(m*16,0, 12,220,ILI9340_BLACK);
       
-        tft_fillRect(m*16,240-bandData[m], 12,240,ILI9340_RED);
+        tft_fillRect(m*16,220-bandData[m], 12,220,ILI9340_RED);
        
         }
 }
       
 if(mode) {  
     x++;
-    if (x>319) x=0 ;
+    if (x>300) x=20 ;
 }
  
         
@@ -563,8 +595,17 @@ if(mode) {
         
     else if(record){
 
-        mPORTBSetBits(BIT_8);
-	for(frame_count=0;frame_count<80;frame_count++){
+    mPORTBSetBits(BIT_8);
+    tft_fillScreen(ILI9340_BLACK);
+    tft_setTextColor(ILI9340_WHITE); 
+    tft_setTextSize(8);
+    tft_setCursor(100, 120);
+    sprintf(buffer, "RECORDING");
+    tft_writeString(print_buffer);
+    tft_fillRect(100,140, 100,10,ILI9340_WHITE);
+	for(frame_count=0;frame_count<16*RECORD_TIME;frame_count++){
+    tft_fillRect(100+((frame_count*p)>>4),140, 1,10,ILI9340_GREEN);
+
     DmaChnEnable(0);
         // yield until DMA done: while((DCH0CON & Chn_busy) ){};
     PT_WAIT_WHILE(pt, DCH0CON & CHN_BUSY);
@@ -579,18 +620,27 @@ if(mode) {
    
   */
     }
-    mPORTBClearBits(BIT_8);    
+    mPORTBClearBits(BIT_8); 
+refresh=1;   
     record=0;    
     }
         
     else if(play){
-          DmaChnDisable(0);
-                   mPORTBSetBits(BIT_9);
-DmaChnOpen(1, 0, DMA_OPEN_DEFAULT);
+        DmaChnDisable(0);
+        mPORTBSetBits(BIT_9);
+        DmaChnOpen(1, 0, DMA_OPEN_DEFAULT);
         DmaChnSetTxfer(1, (char*)v_in, &SPI2BUF, nSamp*2, 2,2); //512 16-bit integers
 	    DmaChnSetEventControl(1, DMA_EV_START_IRQ(_TIMER_3_IRQ));
-        
-	for(frame_count=0;frame_count<80;frame_count++){    
+        tft_fillScreen(ILI9340_BLACK);
+    tft_setTextColor(ILI9340_WHITE); 
+    tft_setTextSize(8);
+    tft_setCursor(100, 120);
+    sprintf(buffer, "PLAYING");
+    tft_writeString(print_buffer);
+       
+    tft_fillRect(100,140, 100,10,ILI9340_WHITE);
+	for(frame_count=0;frame_count<16*RECORD_TIME;frame_count++){    
+    tft_fillRect(100+((frame_count*p)>>4),140, 1,10,ILI9340_GREEN);
         ram_read_byte_array(frame_count*512*2,(char *) v_in,512*2);
       
         int i;
@@ -610,6 +660,7 @@ DmaChnOpen(1, 0, DMA_OPEN_DEFAULT);
     }
   mPORTBClearBits(BIT_9);     
       play=0;
+refresh=1;
       DmaChnDisable(1);
           DmaChnEnable(0);
     }    
@@ -764,57 +815,17 @@ for(m= 1; m <= 20; m++) {
   mPORTBSetPinsDigitalOut(BIT_10);
 
   //and set  both bits to turn off both enables
-  mPORTBSetBits(BIT_10);  
-   Mode16_2();
-    mPORTAClearBits(BIT_4);
-    WriteSPI2(0x0140); // addr not greater than 17 bits
-    while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
-     ReadSPI2();
-     mPORTASetBits(BIT_4);
-     int i;
-   for (i = 0; i < 512; i++){
-         sin_table[i] = DAC_config_chan_A|(short)((2047*sin((float)i*6.283/(float)sine_table_size)+2047));
-     //  sin_table[i]=i;
-   }
-      /*
-      ram_write_byte_array(0,sin_table,50);    
-    delay_ms(10);
-    ram_read_byte_array(0,sin_table2,50);
-  //  int i;
-        for(i=0;i<nSamp;i++)
- {sprintf(buffer, "%d  %d", sin_table[i],sin_table2[i]);
-        printLine(i+1, buffer, ILI9340_WHITE, ILI9340_BLACK);}
-    
-    while(1);   
-     
-     
-  char temp1[10]={1,8,7,6,3,6,4,3,5,1}, temp2[10];
-          ram_write_byte_array(0,temp1,5);    
-    ram_write_byte(0,1);
-    ram_write_byte(1,2);
-    ram_write_byte(2,3);
-    ram_write_byte(3,4);
-    ram_write_byte(4,5);
-    
-    
-      //    delay_ms(1000);
-    ram_read_byte_array(0, temp2,5);
- //int i;
-        for(i=0;i<5;i++)
- {sprintf(buffer, "%x\t\t%x", temp1[i],temp2[i]);
-        printLine(i+1, buffer, ILI9340_WHITE, ILI9340_BLACK);}
- 
-    
-    ram_write_byte(0,5);
-    sprintf(buffer, "%d",ram_read_byte(0));
-        printLine(15, buffer, ILI9340_WHITE, ILI9340_BLACK);        
-   //while(1);
-  
-  */
-  mPORTBSetPinsDigitalOut(BIT_8 | BIT_9);//RECORD LED PLAY LED
-  mPORTBClearBits(BIT_8 | BIT_9);
+mPORTBSetBits(BIT_10);  
+Mode16_2();
+mPORTAClearBits(BIT_4);
+WriteSPI2(0x0140); // 
+while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
+ReadSPI2();
+mPORTASetBits(BIT_4);
 
- mPORTBSetPinsDigitalIn(BIT_3);  //MODE SELECT
+mPORTBSetPinsDigitalOut(BIT_8 | BIT_9);//RECORD LED PLAY LED
+mPORTBClearBits(BIT_8 | BIT_9);
+mPORTBSetPinsDigitalIn(BIT_3);  //MODE SELECT
 PPSInput(1, INT4, RPB7);//RECORD
 ConfigINT4(EXT_INT_PRI_5 | FALLING_EDGE_INT | EXT_INT_ENABLE);
 INTClearFlag(INT_INT4);
