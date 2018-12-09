@@ -63,7 +63,7 @@ fix14 v_in[nSamp],v_in_temp[nSamp] ;
 // thread control structs
 // note that UART input and output are threads
 static struct pt pt_fft ;
-static short x=20, y=0, ypow, ypow_1[Filter_bank_size], color;
+static short x=30, y=0, ypow, ypow_1[Filter_bank_size], color;
       static short color_index, display_phase ;
 // system 1 second interval tick
 int sys_time_seconds ;
@@ -109,7 +109,21 @@ int color_map[32]={0x07F7,
 
 int record =0, play=0;
 int frame_count=0;
+void printval( char* print_buffer){
+ 
+    int iNumSendChars = 0;
+    while (print_buffer[iNumSendChars] != '\0'){
+        while(!UARTTransmitterIsReady(UART1));
+        UARTSendDataByte(UART1, print_buffer[iNumSendChars]);
+        iNumSendChars++;
+    }
+    
+    iNumSendChars=0;
+    while(!UARTTransmitterIsReady(UART1));
+        UARTSendDataByte(UART1, '\n');
+        
 
+}
 // === SPI setup ========================================================
 volatile SpiChannel spiChn = SPI_CHANNEL2 ;	// the SPI channel to use
 volatile int spiClkDiv = 2 ; // 20 MHz max speed for this RAM
@@ -402,8 +416,8 @@ static PT_THREAD (protothread_fft(struct pt *pt))
         DmaChnEnable(0);
 
         // profile fft time
-         sprintf(buffer, "FFT time %dms", (ReadTimer4()*64)/40000);
-        printLine(1, buffer, ILI9340_WHITE, ILI9340_BLACK);    
+      //   sprintf(buffer, "FFT time %dms", (ReadTimer4()*64)/40000);
+     //   printLine(1, buffer, ILI9340_WHITE, ILI9340_BLACK);    
         WriteTimer4(0);
         
         // compute and display fft
@@ -535,7 +549,8 @@ static PT_THREAD (protothread_fft(struct pt *pt))
  tft_fillRoundRect(x, 0, 3, 10, 1, ILI9340_RED);// x,y,w,h,radius,color
   tft_fillRoundRect(x+1, 20, 3, 240, 1, ILI9340_BLACK);// x,y,w,h,radius,color
         }
-        
+      char str[128];
+int index = 0;  
  int startFreqIdx, centerFreqIdx, stopFreqIdx, magnitudeScale;   
 for(m= 1; m <= 20; m++) {
     startFreqIdx = mel[m-1];
@@ -556,7 +571,7 @@ bandData[m]=(temp1/(centerFreqIdx-startFreqIdx))+(temp2/(centerFreqIdx-stopFreqI
 /*
 
     */
-
+ index += sprintf(&str[index], "%d, ", bandData[m]);
 if(mode){
 color_index=bandData[m]>>2;
         
@@ -586,18 +601,20 @@ else if(prevbandData<bandData[m])
     tft_fillRect(m*16,prevbandData, 12, bandData[m]-prevbandData,ILI9340_RED);
        */ 
         
-            tft_fillRect((m-1)*16+2,0, 12,220,ILI9340_BLACK);
+            tft_fillRect((m-1)*16+2,0, 12,205,ILI9340_BLACK);
       
-        tft_fillRect((m-1)*16+2,210-bandData[m], 12,bandData[m],ILI9340_RED);
+        tft_fillRect((m-1)*16+2,205-bandData[m], 12,bandData[m],ILI9340_RED);
        
         }
+
+  
 }
       
 if(mode) {  
     x++;
     if (x>300) x=30 ;
 }
-  
+ printval(str);
     }
         
     else if(record){
@@ -843,6 +860,13 @@ INTClearFlag(INT_INT4);
 PPSInput(4, INT1, RPA3);//PLAY
 ConfigINT1(EXT_INT_PRI_4 | FALLING_EDGE_INT | EXT_INT_ENABLE);
 INTClearFlag(INT_INT1);  
+
+
+  UARTConfigure(UART1, UART_ENABLE_PINS_TX_RX_ONLY);
+  UARTSetLineControl(UART1, UART_DATA_SIZE_8_BITS | UART_PARITY_NONE | UART_STOP_BITS_1);
+  UARTSetDataRate(UART1, pb_clock, 19200);
+  UARTEnable(UART1, UART_ENABLE_FLAGS(UART_PERIPHERAL | UART_RX | UART_TX)); 
+   PPSOutput(	1	,	RPA0	,	U1TX	);
       //int i;
       DmaChnEnable(0);
      //RPB10 CHIP SELECT FOR DAC
