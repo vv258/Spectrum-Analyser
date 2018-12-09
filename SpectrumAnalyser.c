@@ -65,6 +65,38 @@ int mel[22]={19,24,29,35,41,47,54,62,70,79,89,99,110,122,135,148,163,179,196,215
 int m=0;
 int bandData[20];
 int mode=0,prev_mode=0;
+int color_map[32]={0x07F7,
+0x07F5,
+0x07F2,
+0x07F0,
+0x07ED,
+0x07EA,
+0x07E8,
+0x07E5,
+0x07E2,
+0x07E0,
+0x17E0,
+0x2FE0,
+0x47E0,
+0x57E0,
+0x6FE0,
+0x87E0,
+0x97E0,
+0xAFE0,
+0xBFE0,
+0xD7E0,
+0xEFE0,
+0xFFE0,
+0xFF40,
+0xFEA0,
+0xFDE0,
+0xFD40,
+0xFCA0,
+0xFC00,
+0xFB40,
+0xFAA0,
+0xFA00,
+0xF940};
 // === print line for TFT ============================================
 // print a line on the TFT
 // string buffer
@@ -321,13 +353,18 @@ bandData[m]=0;
 if(mode){
 color_index=bandData[m]>>3;
         
-if(color_index< 10)
+/*if(color_index< 10)
     color=color_index;
 else if(color_index< 20)
     color=(color_index<<6);
 else
     color=(color_index<<11);
             // */
+    
+    if(color_index<32)
+        color =color_map[color_index];
+    else
+    color =0xF800;
             tft_fillRoundRect(x,230-(10*m), 1, 10, 1, color);// x,y,w,h,radius,color
             ypow_1[m] = ypow;
 }
