@@ -1,6 +1,6 @@
 /*
- * File:        ADC > FFT > TFT
- * Author:      Bruce Land
+ * File:        Spectrumanalyser
+ * Authors:     Vipin Venugopal, Gururaj Bhupal
  * 
  * Target PIC:  PIC32MX250F128B
  */
@@ -20,7 +20,6 @@
 #include <stdlib.h>
 #include <math.h>
 ////////////////////////////////////
-// DDS sine table
 
 
 /* Demo code for interfacing TFT (ILI9340 controller) to PIC32
@@ -59,58 +58,25 @@ int refresh =1;
 #define nPixels 340
 fix14 v_in[nSamp],v_in_temp[nSamp] ;
 #define Filter_bank_size 22
-// === thread structures ============================================
-// thread control structs
-// note that UART input and output are threads
+
 static struct pt pt_fft ;
 static short x=30, y=0, ypow, ypow_1[Filter_bank_size], color;
       static short color_index, display_phase ;
-// system 1 second interval tick
 int sys_time_seconds ;
-//int mel[22]={19,24,29,35,41,47,54,62,70,79,89,99,110,122,135,148,163,179,196,215,235,256};
+//Frequency bands for display
 int freq[22]={300,376,458,547,642,745,856,975,1103,1241,1389,1549,1721,1906,2105,2320,2551,2800,3067,3355,3666,4000};
+//FFT values for binning
 int mel[22]={4,6,7,8,10,11,13,15,17,19,22,24,27,30,33,37,40,44,49,53,58,64};
 int sound =0;
 int m=0;
 int bandData[20];
 int mode=0,prev_mode=0;
-int color_map[32]={
-0x07F7,
-//0x07F5,
-//0x07F2,
-//0x07F0,
-0x07ED,
-//0x07EA,
-//0x07E8,
-//0x07E5,
-//0x07E2,
-0x07E0,
-//0x17E0,
-//0x2FE0,
-//0x47E0,
-//0x57E0,
-//0x6FE0,
-//0x87E0,
-0x97E0,
-//0xAFE0,
-//0xBFE0,
-//0xD7E0,
-//0xEFE0,
-//0xFFE0,
-//0xFF40,
-0xFEA0,
-//0xFDE0,
-//0xFD40,
-//0xFCA0,
-0xFC00,
-//0xFB40,
-//0xFAA0,
-//0xFA00,
-0xF940
-};
+int color_map[32]={0x07F7,0x07ED,0x07E0,0x97E0,0xFEA0,0xFC00,0xF940};
 
 int record =0, play=0;
 int frame_count=0;
+
+//======== Function for transmitting Serial Data through UART================
 void printval( char* print_buffer){
  
     int iNumSendChars = 0;
@@ -315,9 +281,7 @@ int ram_read_byte_array(int addr, char* data, int count){
 
 
 
-// === print line for TFT ============================================
-// print a line on the TFT
-// string buffer
+
 
 //=== FFT ==============================================================
 // FFT
@@ -405,21 +369,18 @@ static PT_THREAD (protothread_fft(struct pt *pt))
     static int sx, y, ly, temp ;
     display_phase = 0;
     while(1) {
-        // yield time 1 second
-       // PT_YIELD_TIME_msec(30);
         
-        if(!play && !record){
+        if(!play && !record){ //check if system is in analyse mode
         
         // enable ADC DMA channel and get
-        // 512 samples from ADC
+        // 256 samples from ADC
         // yield until DMA done: while((DCH0CON & Chn_busy) ){};
         PT_WAIT_WHILE(pt, DCH0CON & CHN_BUSY);
         memcpy(v_in,v_in_temp,nSamp*2);
         DmaChnEnable(0);
 
         // profile fft time
-      //   sprintf(buffer, "FFT time %dms", (ReadTimer4()*64)/40000);
-     //   printLine(1, buffer, ILI9340_WHITE, ILI9340_BLACK);    
+ 
         WriteTimer4(0);
         
         // compute and display fft
@@ -432,54 +393,10 @@ static PT_THREAD (protothread_fft(struct pt *pt))
         
         // do FFT
         FFTfix(fr, fi, LOG2_N_WAVE);
-   /*     // get magnitude and log
-        // The magnitude of the FFT is approximated as: 
-        //   |amplitude|=max(|Re|,|Im|)+0.4*min(|Re|,|Im|). 
-        // This approximation is accurate within about 4% rms.
-        // https://en.wikipedia.org/wiki/Alpha_max_plus_beta_min_algorithm
-      for (sample_number = 0; sample_number < nPixels; sample_number++) {  
-            // get the approx magnitude
-            fr[sample_number] = abs(fr[sample_number]); //>>9
-            fi[sample_number] = abs(fi[sample_number]);
-            // reuse fr to hold magnitude
-            fr[sample_number] = max(fr[sample_number], fi[sample_number]) + 
-                    multfix14(min(fr[sample_number], fi[sample_number]), zero_point_4); 
-            
-            // reuse fr to hold log magnitude
-            // shifting finds most significant bit
-            // then make approxlog  = ly + (fr-y)./(y) + 0.043;
-            // BUT for an 8-bit approx (4 bit ly and 4-bit fraction)
-            // ly 1<=ly<=14
-            // omit the 0.043 because it is too small for 4-bit fraction
-            
-            sx = fr[sample_number];
-            y=1; ly=0;
-            while(sx>1) {
-               y=y*2; ly=ly+1; sx=sx>>1;
-            }
-            // shift ly into upper 4-bits as integer part of log
-            // take bits below y and shift into lower 4-bits
-            fr[sample_number] = ((ly)<<4) + ((fr[sample_number]-y)>>(ly-4) ) ;
-            // bound the noise at low amp
-            if(fr[sample_number]<log_min) fr[sample_number] = log_min;
-        }
-        
-        // timer 4 set up with prescalar=8, 
-        // hence mult reading by 8 to get machine cycles
-    //    sprintf(buffer, "FFT cycles %d", (ReadTimer4())*8);
-    //    printLine2(11, buffer, ILI9340_WHITE, ILI9340_BLACK);
-        
-        // Display on TFT
-        // erase, then draw
-     /*   for (sample_number = 0; sample_number < nPixels; sample_number++) {
-            tft_drawPixel(sample_number, pixels[sample_number], ILI9340_BLACK);
-            pixels[sample_number] = -fr[sample_number] + 200 ;
-            tft_drawPixel(sample_number, pixels[sample_number], ILI9340_WHITE);
-            // reuse fr to hold magnitude 
-        }    
-      */
+  
+        //calculate power spectral density    
         long place, root;
-       
+             
         for (sample_number = 0; sample_number < nSamp; sample_number++) {
             fr[sample_number] = (fr[sample_number] * fr[sample_number] + 
                   fi[sample_number] * fi[sample_number]);
@@ -511,19 +428,24 @@ static PT_THREAD (protothread_fft(struct pt *pt))
         //tft_drawFastVLine(sample_number, 0,  220, ILI9340_BLACK);
 	    //tft_drawFastVLine(sample_number, 0,  fr[sample_number], ILI9340_RED);
         }
+            
+            
+        //read the current mode of operation 0:spectrum 1:spectrograph
         prev_mode=mode;
         mode=mPORTBReadBits(BIT_3);
+            
+            
         if(mode!=prev_mode || refresh){
-              tft_fillScreen(ILI9340_BLACK);
-            refresh=0;
+              tft_fillScreen(ILI9340_BLACK); //clear the display
+                refresh=0; // clear the refresh flag
                 int k=0;
 
                 if(mode){
                     int m=0;
                     for(m=0;m<7;m++)
-                    tft_fillRoundRect(305,210-(30*m), 15, 30, 1, color_map[m]);// x,y,w,h,radius,color
+                    tft_fillRoundRect(305,210-(30*m), 15, 30, 1, color_map[m]);// display intensity map on TFT
                     tft_setTextColor(ILI9340_WHITE); 
-                    tft_setTextSize(1);
+                    tft_setTextSize(1); //display band center frequencies on TFT
                     for(k=0;k<22;k++){
                         tft_setCursor(0, 230-(10*k));
                         sprintf(buffer, "%d", freq[k]);
@@ -536,7 +458,7 @@ static PT_THREAD (protothread_fft(struct pt *pt))
                     tft_setTextColor(ILI9340_WHITE); 
                     tft_setTextSize(1);
                     tft_setRotation(0); 
-                    for(k=0;k<22;k++){
+                    for(k=0;k<22;k++){//display band center frequencies on TFT
                         tft_setCursor(0, 15*k);
                         sprintf(buffer, "%d", freq[k]);
                         tft_writeString(buffer);
@@ -546,25 +468,29 @@ static PT_THREAD (protothread_fft(struct pt *pt))
                 }
         
         }
-        if(mode){
- tft_fillRoundRect(x-1, 120 *(!display_phase), 3, 10, 1, ILI9340_BLACK);// x,y,w,h,radius,color
- tft_fillRoundRect(x, 120 *(!display_phase), 3, 10, 1, ILI9340_RED);// x,y,w,h,radius,color
-if(display_phase==0) 
- tft_fillRoundRect(x+1, 130, 3, 225, 1, ILI9340_BLACK);// x,y,w,h,radius,color
-else
- tft_fillRoundRect(x+1, 20, 3, 100, 1, ILI9340_BLACK);// x,y,w,h,radius,color
-
+            
+            
+        if(mode){ //display pointer for spectrograph
+            tft_fillRoundRect(x-1, 120 *(!display_phase), 3, 10, 1, ILI9340_BLACK);// x,y,w,h,radius,color
+            tft_fillRoundRect(x, 120 *(!display_phase), 3, 10, 1, ILI9340_RED);// x,y,w,h,radius,color
+                
+                if(display_phase==0)  // erase the are around current display line for spectrograph
+                    tft_fillRoundRect(x+1, 130, 3, 225, 1, ILI9340_BLACK);// x,y,w,h,radius,color
+                else
+                    tft_fillRoundRect(x+1, 20, 3, 100, 1, ILI9340_BLACK);// x,y,w,h,radius,color
         }
-      char str[128];
+            
+char str[128];
 int index = 0;  
- int startFreqIdx, centerFreqIdx, stopFreqIdx, magnitudeScale;   
-for(m= 1; m <= 20; m++) {
+int startFreqIdx, centerFreqIdx, stopFreqIdx, magnitudeScale;   
+
+for(m= 1; m <= 20; m++) {   //calculate bandata for mel bins
     startFreqIdx = mel[m-1];
-     centerFreqIdx = mel[m];
-     stopFreqIdx   = mel[m+1];
-     int prevbandData =bandData[m];
-     int temp1=0,temp2=0;
-bandData[m]=0;
+    centerFreqIdx = mel[m];
+    stopFreqIdx   = mel[m+1];
+    int prevbandData =bandData[m];
+    int temp1=0,temp2=0;
+    bandData[m]=0;
     for( sample_number = startFreqIdx; sample_number < centerFreqIdx; sample_number++){
        // magnitudeScale = centerFreqIdx-startFreqIdx;
         temp1 += fr[sample_number]*(sample_number-startFreqIdx);//magnitudeScale;
@@ -574,135 +500,124 @@ bandData[m]=0;
        temp2 += fr[sample_number]*(sample_number-stopFreqIdx);///magnitudeScale;
     }
 bandData[m]=(temp1/(centerFreqIdx-startFreqIdx))+(temp2/(centerFreqIdx-stopFreqIdx));
-/*
 
-    */
+    //append banddate to string for sending to PC
  index += sprintf(&str[index], "%d,", bandData[m]<<2);
+    
+    //select color for spectrograph display based on intensity
 if(mode){
 color_index=bandData[m];
         
- if(color_index< 2)
-    color=color_map[0];
-else if(color_index< 4)
-    color=color_map[1];
-else if(color_index< 8)
-    color=color_map[2];
-else if(color_index< 16)
-    color=color_map[3];
-else if(color_index< 32)
-    color=color_map[4];
-else if(color_index< 64)
-    color=color_map[5];
-else 
-    color=color_map[6];
+    if(color_index< 2)
+        color=color_map[0];
+    else if(color_index< 4)
+        color=color_map[1];
+    else if(color_index< 8)
+        color=color_map[2];
+    else if(color_index< 16)
+        color=color_map[3];
+    else if(color_index< 32)
+        color=color_map[4];
+    else if(color_index< 64)
+        color=color_map[5];
+    else 
+        color=color_map[6];
 
-
-
-           // tft_fillRoundRect(x,230-(10*m), 1, 10, 1, color);// x,y,w,h,radius,color
-if(display_phase==0)
-tft_drawFastVLine(x    , 230-(5*m)  ,5, color); // 225 to 135
-else
-tft_drawFastVLine(x    , 120-(5*m)  ,5, color); // 115 to 25
-
+    if(display_phase==0)
+        tft_drawFastVLine(x    , 230-(5*m)  ,5, color); // 225 to 135
+    else
+        tft_drawFastVLine(x    , 120-(5*m)  ,5, color); // 115 to 25
 }
-   
-        
-      
-        else{
-        
-     /*   if(prevbandData>bandData[m])
-    tft_fillRect(m*16,bandData[m], 12,prevbandData-bandData[m],ILI9340_BLACK);
-else if(prevbandData<bandData[m])
-    tft_fillRect(m*16,prevbandData, 12, bandData[m]-prevbandData,ILI9340_RED);
-       */ 
-        
-            tft_fillRect((m-1)*16+2,0, 12,205,ILI9340_BLACK);
-      
-        tft_fillRect((m-1)*16+2,205-(bandData[m]<<2), 12,(bandData[m]<<2),ILI9340_RED);
+         
+else{ //display bar graph for spectrum
+
+    tft_fillRect((m-1)*16+2,0, 12,205,ILI9340_BLACK);      
+    tft_fillRect((m-1)*16+2,205-(bandData[m]<<2), 12,(bandData[m]<<2),ILI9340_RED);
        
-        }
-
-  
+    }
 }
       
-if(mode) {  
+if(mode) {   // update the display position for spectrograph
     x++;
-    if (x>300) {x=30 ;display_phase = !display_phase ;}
+    if (x>300){
+            x=30 ;display_phase = !display_phase ;
+        }
 }
+
+//send UART data
  printval(str);
+}
+        
+    else if(record){//check if record button was pressed
+
+        mPORTBSetBits(BIT_8);//turn on record led
+        //display Recording message and progress bar
+
+        tft_fillScreen(ILI9340_BLACK);
+        tft_setTextColor(ILI9340_WHITE); 
+        tft_setTextSize(3);
+        tft_setCursor(70, 100);
+        sprintf(buffer, "RECORDING");
+        tft_writeString(buffer);
+        tft_fillRect(100,140, 100,10,ILI9340_WHITE);
+        
+	   for(frame_count=0;frame_count<RECORD_COUNT;frame_count++){
+            tft_fillRect(100+(frame_count*100/RECORD_COUNT),140, 1,10,ILI9340_RED); //updat progress bar
+            DmaChnEnable(0);
+            PT_WAIT_WHILE(pt, DCH0CON & CHN_BUSY); //wait for sampling to complete
+            memcpy(v_in,v_in_temp,nSamp*2); //copy from temporary buffer
+            ram_write_byte_array(frame_count*nSamp*2,(char *)v_in,nSamp*2);    //writet to ram
+        }
+        mPORTBClearBits(BIT_8); 
+        refresh=1;   
+        record=0;    
     }
         
-    else if(record){
-
-    mPORTBSetBits(BIT_8);
-    tft_fillScreen(ILI9340_BLACK);
-    tft_setTextColor(ILI9340_WHITE); 
-    tft_setTextSize(3);
-    tft_setCursor(70, 100);
-    sprintf(buffer, "RECORDING");
-    tft_writeString(buffer);
-    tft_fillRect(100,140, 100,10,ILI9340_WHITE);
-	for(frame_count=0;frame_count<RECORD_COUNT;frame_count++){
-    tft_fillRect(100+(frame_count*100/RECORD_COUNT),140, 1,10,ILI9340_RED);
-
-    DmaChnEnable(0);
-        // yield until DMA done: while((DCH0CON & Chn_busy) ){};
-    PT_WAIT_WHILE(pt, DCH0CON & CHN_BUSY);
-    memcpy(v_in,v_in_temp,nSamp*2);
-    ram_write_byte_array(frame_count*nSamp*2,(char *)v_in,nSamp*2);    
-    //ram_read_byte_array(frame_count*512*2,(char *) sin_table2,512*2);
- /*int i;
-        for(i=0;i<nSamp;i++)
- {sprintf(buffer, "%x\t\t%x", sin_table[i],sin_table2[i]);
-        printLine(i+1, buffer, ILI9340_WHITE, ILI9340_BLACK);
-    }
-   
-  */
-    }
-    mPORTBClearBits(BIT_8); 
-refresh=1;   
-    record=0;    
-    }
+    else if(play){ //check if play button was pressed
+        //setup dma transfer from buffer to DAC
         
-    else if(play){
         DmaChnDisable(0);
-        mPORTBSetBits(BIT_9);
+        mPORTBSetBits(BIT_9); //turn on play led
         DmaChnOpen(1, 0, DMA_OPEN_DEFAULT);
         DmaChnSetTxfer(1, (char*)v_in, &SPI2BUF, nSamp*2, 2,2); //512 16-bit integers
 	    DmaChnSetEventControl(1, DMA_EV_START_IRQ(_TIMER_3_IRQ));
+        
+        //display Playing message and progress bar
         tft_fillScreen(ILI9340_BLACK);
-    tft_setTextColor(ILI9340_WHITE); 
-    tft_setTextSize(3);
-    tft_setCursor(85, 100);
-    sprintf(buffer, "PLAYING");
-    tft_writeString(buffer);
-      
-    tft_fillRect(100,140, 100,10,ILI9340_WHITE);
-	for(frame_count=0;frame_count<RECORD_COUNT;frame_count++){    
-    tft_fillRect(100+(frame_count*100/RECORD_COUNT),140, 1,10,ILI9340_GREEN);
-        ram_read_byte_array(frame_count*nSamp*2,(char *) v_in,nSamp*2);
+        tft_setTextColor(ILI9340_WHITE); 
+        tft_setTextSize(3);
+        tft_setCursor(85, 100);
+        sprintf(buffer, "PLAYING");
+        tft_writeString(buffer);
+        tft_fillRect(100,140, 100,10,ILI9340_WHITE);
+        
+	   for(frame_count=0;frame_count<RECORD_COUNT;frame_count++){    
+            tft_fillRect(100+(frame_count*100/RECORD_COUNT),140, 1,10,ILI9340_GREEN); //update progress bar
+            ram_read_byte_array(frame_count*nSamp*2,(char *) v_in,nSamp*2); //read data from ram
       
         int i;
         for(i=0;i<nSamp;i++){
    
-        v_in[i]=DAC_config_chan_A|(v_in[i]<<2); 
+        v_in[i]=DAC_config_chan_A|(v_in[i]<<2); //add control word to dac data
         }
+        
+        //enable framed mode spi   
         SpiChnOpen(SPI_CHANNEL2, SPI_OPEN_ON | SPI_OPEN_MODE16 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV | SPICON_FRMEN | SPICON_FRMPOL, 2);
-          PPSOutput(4, RPB10, SS2);
-	
+        PPSOutput(4, RPB10, SS2);
         DmaChnSetEvEnableFlags(1, DMA_EV_BLOCK_DONE);
-         DmaChnEnable(1);      
-        while(!(DmaChnGetEvFlags(1)&DMA_EV_BLOCK_DONE));            
-        // delay_ms(1000/16);
-        DmaChnClrEvFlags(1, DMA_EV_BLOCK_DONE);
+        DmaChnEnable(1);      
+        
+        while(!(DmaChnGetEvFlags(1)&DMA_EV_BLOCK_DONE));    //wait till play of current frame is complete     
+        DmaChnClrEvFlags(1, DMA_EV_BLOCK_DONE); //clear the flag
+        //enable spi for reading from ram
         SpiChnOpen(spiChn, SPI_OPEN_ON | SPI_OPEN_MODE8 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV , spiClkDiv);
 
     }
   mPORTBClearBits(BIT_9);     
-        play=0;
-        refresh=1;
-        DmaChnDisable(1);
-        DmaChnEnable(0);
+        play=0; //clear play flag
+        refresh=1; //set refresh flag
+        DmaChnDisable(1); //disable ram channel
+        DmaChnEnable(0);//enable adc to buffer channel
     }    
         
          // NEVER exit while
@@ -715,7 +630,7 @@ void __ISR(_EXTERNAL_4_VECTOR, ipl5) INT4Interrupt() {
     
    mINT4ClearIntFlag();  
     
-    record=1;
+    record=1; //set record flag
     
     
 }
@@ -725,7 +640,7 @@ void __ISR(_EXTERNAL_1_VECTOR, ipl4) INT1Interrupt() {
     
    mINT1ClearIntFlag();  
     
-    play=1;
+    play=1; //set play flag
     
     
 }
@@ -789,27 +704,20 @@ void main(void) {
 
     // define setup parameters for OpenADC10
     // set AN11 and  as analog inputs
-   // #define PARAM4	ENABLE_AN11_ANA // pin 24
-    #define PARAM4	ENABLE_AN1_ANA // pin 24
+   
+    #define PARAM4	ENABLE_AN1_ANA 
 
     // define setup parameters for OpenADC10
     // do not assign channels to scan
     #define PARAM5	SKIP_SCAN_ALL
 
-    // use ground as neg ref for A | use AN11 for input A     
-    // configure to sample AN11 
-    SetChanADC10(ADC_CH0_NEG_SAMPLEA_NVREF | ADC_CH0_POS_SAMPLEA_AN1); // configure to sample AN4 
+    SetChanADC10(ADC_CH0_NEG_SAMPLEA_NVREF | ADC_CH0_POS_SAMPLEA_AN1); 
     OpenADC10(PARAM1, PARAM2, PARAM3, PARAM4, PARAM5); // configure ADC using the parameters defined above
 
     EnableADC10(); // Enable the ADC
     ///////////////////////////////////////////////////////
-   // OpenTimer2(T2_ON | T2_SOURCE_INT | T2_PS_1_256, sys_clock/256000);
-  //  OpenOC1(OC_ON | OC_TIMER2_SRC | OC_PWM_FAULT_PIN_DISABLE,sys_clock/512000 ,sys_clock/256000 );
-  //  PPSOutput(	1	,	RPA0	,	OC1	    );// 
-    // timer 4 setup for profiling code ===========================================
-    // Set up timer2 on,  interrupts, internal clock, prescalar 1, compare-value
-    // This timer generates the time base for each horizontal video line
-    OpenTimer4(T4_ON | T4_SOURCE_INT | T4_PS_1_64, 0xffff);
+   
+    OpenTimer4(T4_ON | T4_SOURCE_INT | T4_PS_1_64, 0xffff);//for profiling
         
     // === init FFT data =====================================
     // one cycle sine table
@@ -832,13 +740,14 @@ void main(void) {
     delay_ms(1000);
     //240x320 vertical display
     tft_setRotation(1); // Use tft_setRotation(1) for 320x240
-for(m= 1; m <= 20; m++) {
-    bandData[m]=0;
+
+    for(m= 1; m <= 20; m++) { //initialise banddata
+        bandData[m]=0;
 }
     
   
     
-     // === set up SPI =======================
+ // ========================= set up SPI =======================
   // SCK2 is pin 26 
   // SDO2 (MOSI) is in PPS output group 2, could be connected to RPB5 which is pin 14
   PPSOutput(2, RPB5, SDO2);
@@ -855,39 +764,41 @@ for(m= 1; m <= 20; m++) {
   // possibles SPI_OPEN_CKP_HIGH;   SPI_OPEN_SMP_END;  SPI_OPEN_CKE_REV
   // For any given peripheral, you will need to match these
   SpiChnOpen(spiChn, SPI_OPEN_ON | SPI_OPEN_MODE8 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV , spiClkDiv);
- 
   mPORTBSetPinsDigitalOut(BIT_10);
-
-  //and set  both bits to turn off both enables
-mPORTBSetBits(BIT_10);  
-Mode16_2();
-mPORTAClearBits(BIT_4);
-WriteSPI2(0x0140); // 
-while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
-ReadSPI2();
-mPORTASetBits(BIT_4);
-
-mPORTBSetPinsDigitalOut(BIT_8 | BIT_9);//RECORD LED PLAY LED
-mPORTBClearBits(BIT_8 | BIT_9);
-mPORTBSetPinsDigitalIn(BIT_3);  //MODE SELECT
-PPSInput(1, INT4, RPB7);//RECORD
-ConfigINT4(EXT_INT_PRI_5 | FALLING_EDGE_INT | EXT_INT_ENABLE);
-INTClearFlag(INT_INT4);
     
-PPSInput(4, INT1, RPA3);//PLAY
-ConfigINT1(EXT_INT_PRI_4 | FALLING_EDGE_INT | EXT_INT_ENABLE);
-INTClearFlag(INT_INT1);  
+    
+//===========write control word to set RAM to sequential mode================
+    mPORTBSetBits(BIT_10);  
+    Mode16_2();
+    mPORTAClearBits(BIT_4);
+    WriteSPI2(0x0140); // 
+    while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
+    ReadSPI2();
+    mPORTASetBits(BIT_4);
+    //RPB10 CHIP SELECT FOR DAC
+    //RPA4  CHIP SELECT FOR RAM
+//==========Setup and configure user interfac buttons, leds and interrupts==============
+ 
+    mPORTBSetPinsDigitalOut(BIT_8 | BIT_9);//RECORD LED PLAY LED
+    mPORTBClearBits(BIT_8 | BIT_9);
+    mPORTBSetPinsDigitalIn(BIT_3);  //MODE SELECT
+    PPSInput(1, INT4, RPB7);//RECORD
+    ConfigINT4(EXT_INT_PRI_5 | FALLING_EDGE_INT | EXT_INT_ENABLE);
+    INTClearFlag(INT_INT4);
+    PPSInput(4, INT1, RPA3);//PLAY
+    ConfigINT1(EXT_INT_PRI_4 | FALLING_EDGE_INT | EXT_INT_ENABLE);
+    INTClearFlag(INT_INT1);  
+   
+//===========setup uart transmission ==============================================
 
+    UARTConfigure(UART1, UART_ENABLE_PINS_TX_RX_ONLY);
+    UARTSetLineControl(UART1, UART_DATA_SIZE_8_BITS | UART_PARITY_NONE | UART_STOP_BITS_1);
+    UARTSetDataRate(UART1, pb_clock, 19200);
+    UARTEnable(UART1, UART_ENABLE_FLAGS(UART_PERIPHERAL | UART_RX | UART_TX)); 
+    PPSOutput(	1	,	RPA0	,	U1TX	);
+    
+    DmaChnEnable(0); //enable transfer of sampled data
 
-  UARTConfigure(UART1, UART_ENABLE_PINS_TX_RX_ONLY);
-  UARTSetLineControl(UART1, UART_DATA_SIZE_8_BITS | UART_PARITY_NONE | UART_STOP_BITS_1);
-  UARTSetDataRate(UART1, pb_clock, 19200);
-  UARTEnable(UART1, UART_ENABLE_FLAGS(UART_PERIPHERAL | UART_RX | UART_TX)); 
-   PPSOutput(	1	,	RPA0	,	U1TX	);
-      //int i;
-      DmaChnEnable(0);
-     //RPB10 CHIP SELECT FOR DAC
-//RPA4  CHIP SELECT FOR RAM   
  // round-robin scheduler for threads
     while (1) {
         PT_SCHEDULE(protothread_fft(&pt_fft));
