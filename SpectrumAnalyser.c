@@ -20,7 +20,9 @@
 #include <stdlib.h>
 #include <math.h>
 ////////////////////////////////////
-
+// DDS sine table
+#define sine_table_size 512
+static short sin_table[sine_table_size], sin_table2[sine_table_size];
 
 /* Demo code for interfacing TFT (ILI9340 controller) to PIC32
  * The library has been modified from a similar Adafruit library
@@ -113,6 +115,7 @@ volatile int spiClkDiv = 2 ; // 20 MHz max speed for this RAM
 // This is used in the array read/write functions
 #define RAM_WRITE_CMD (0x2000000) // top 8 bits -- 24 bits for address
 #define RAM_READ_CMD  (0x3000000) // top 8 bits -- 24 bits for address
+
 // command format consists of a read or write command ORed with a 24-bit
 // address, even though the actual address is never more than 17 bits
 // general procedure will be:
@@ -142,6 +145,38 @@ bit 11-0 D11:D0: DAC Input Data bits. Bit x is ignored.
 */
 // A-channel, 1x, active
 #define DAC_config_chan_A 0b0011000000000000
+char buffer[60];
+void printLine(int line_number, char* print_buffer, short text_color, short back_color){
+    // line number 0 to 31 
+    /// !!! assumes tft_setRotation(0);
+    // print_buffer is the string to print
+    int v_pos;
+    v_pos = line_number * 10 ;
+    // erase the pixels
+    tft_fillRoundRect(0, v_pos, 239, 8, 1, back_color);// x,y,w,h,radius,color
+    tft_setTextColor(text_color); 
+    tft_setCursor(0, v_pos);
+    tft_setTextSize(1);
+    tft_writeString(print_buffer);
+}
+
+void printLine2(int line_number, char* print_buffer, short text_color, short back_color){
+    // line number 0 to 31 
+    /// !!! assumes tft_setRotation(0);
+    // print_buffer is the string to print
+    int v_pos;
+    v_pos = line_number * 20 ;
+    // erase the pixels
+    tft_fillRoundRect(0, v_pos, 239, 16, 1, back_color);// x,y,w,h,radius,color
+    tft_setTextColor(text_color); 
+    tft_setCursor(0, v_pos);
+    tft_setTextSize(2);
+    tft_writeString(print_buffer);
+}
+
+
+
+
 
 // === spi bit widths ====================================================
 // hit the SPI control register directly
@@ -211,6 +246,7 @@ void ram_write_byte_array(int addr, char* data, int count){
     for(i=0; i<count; i++){
         WriteSPI2(data[i]); // data write
         while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
+       
         junk = ReadSPI2();
     }
     mPORTASetBits(BIT_4);
@@ -258,34 +294,6 @@ int ram_read_byte_array(int addr, char* data, int count){
 // === print line for TFT ============================================
 // print a line on the TFT
 // string buffer
-char buffer[60];
-void printLine(int line_number, char* print_buffer, short text_color, short back_color){
-    // line number 0 to 31 
-    /// !!! assumes tft_setRotation(0);
-    // print_buffer is the string to print
-    int v_pos;
-    v_pos = line_number * 10 ;
-    // erase the pixels
-    tft_fillRoundRect(0, v_pos, 239, 8, 1, back_color);// x,y,w,h,radius,color
-    tft_setTextColor(text_color); 
-    tft_setCursor(0, v_pos);
-    tft_setTextSize(1);
-    tft_writeString(print_buffer);
-}
-
-void printLine2(int line_number, char* print_buffer, short text_color, short back_color){
-    // line number 0 to 31 
-    /// !!! assumes tft_setRotation(0);
-    // print_buffer is the string to print
-    int v_pos;
-    v_pos = line_number * 20 ;
-    // erase the pixels
-    tft_fillRoundRect(0, v_pos, 239, 16, 1, back_color);// x,y,w,h,radius,color
-    tft_setTextColor(text_color); 
-    tft_setCursor(0, v_pos);
-    tft_setTextSize(2);
-    tft_writeString(print_buffer);
-}
 
 //=== FFT ==============================================================
 // FFT
@@ -442,7 +450,6 @@ static PT_THREAD (protothread_fft(struct pt *pt))
             tft_drawPixel(sample_number, pixels[sample_number], ILI9340_WHITE);
             // reuse fr to hold magnitude 
         }    
-        
       */
         long place, root;
        
@@ -556,38 +563,54 @@ if(mode) {
         
     else if(record){
 
-        mPORTBSETBits(BIT_8);
+        mPORTBSetBits(BIT_8);
 	for(frame_count=0;frame_count<80;frame_count++){
     DmaChnEnable(0);
         // yield until DMA done: while((DCH0CON & Chn_busy) ){};
     PT_WAIT_WHILE(pt, DCH0CON & CHN_BUSY);
-    ram_write_byte_array(frame_count*512*2,v_in,512*2);    
-        
-    }    
+    
+    ram_write_byte_array(frame_count*512*2,(char *)v_in,512*2);    
+    //ram_read_byte_array(frame_count*512*2,(char *) sin_table2,512*2);
+ /*int i;
+        for(i=0;i<nSamp;i++)
+ {sprintf(buffer, "%x\t\t%x", sin_table[i],sin_table2[i]);
+        printLine(i+1, buffer, ILI9340_WHITE, ILI9340_BLACK);
+    }
+   
+  */
+    }
     mPORTBClearBits(BIT_8);    
     record=0;    
     }
         
     else if(play){
           DmaChnDisable(0);
-                   mPORTBSETBits(BIT_9);
-
-	for(frame_count=0;frame_count<80;frame_count++){    
-        ram_read_byte_array(frame_count*512*2,v_in,512*2);
-        for(i=0;i<nSamp;i++)
-            v_in[i]=DAC_config_chan_A|(v_in[i]<<2);
-        SpiChnOpen(SPI_CHANNEL2, SPI_OPEN_ON | SPI_OPEN_MODE16 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV | SPICON_FRMEN | SPICON_FRMPOL, 2);
-        DmaChnOpen(1, 0, DMA_OPEN_DEFAULT);
-        DmaChnSetTxfer(1, (void*)v_in, &SPI2BUF2, nSamp*2, 2); //512 16-bit integers
+                   mPORTBSetBits(BIT_9);
+DmaChnOpen(1, 0, DMA_OPEN_DEFAULT);
+        DmaChnSetTxfer(1, (char*)v_in, &SPI2BUF, nSamp*2, 2,2); //512 16-bit integers
 	    DmaChnSetEventControl(1, DMA_EV_START_IRQ(_TIMER_3_IRQ));
-        DmaChnSetEvEnableFlags(1, DMA_EV_BLOCK_DONE);	
-            PT_WAIT_UNTIL(pt,  DmaChnGetEvFlags(1));            
-        DmaChnClrEvFlags(1, DMA_EV_BLOCK_DONE);
+        
+	for(frame_count=0;frame_count<80;frame_count++){    
+        ram_read_byte_array(frame_count*512*2,(char *) v_in,512*2);
+      
+        int i;
+        for(i=0;i<nSamp;i++)
+           // sprintf(buffer, "%x", v_in[i]);
+        v_in[i]=DAC_config_chan_A|(v_in[i]<<3);
+        SpiChnOpen(SPI_CHANNEL2, SPI_OPEN_ON | SPI_OPEN_MODE16 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV | SPICON_FRMEN | SPICON_FRMPOL, 2);
+          PPSOutput(4, RPB10, SS2);
+	
+        DmaChnSetEvEnableFlags(1, DMA_EV_BLOCK_DONE);
+         DmaChnEnable(1);      
+        while(!(DmaChnGetEvFlags(1)&DMA_EV_BLOCK_DONE));            
+        // delay_ms(1000/16);
+         DmaChnClrEvFlags(1, DMA_EV_BLOCK_DONE);
         SpiChnOpen(spiChn, SPI_OPEN_ON | SPI_OPEN_MODE8 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV , spiClkDiv);
 
     }
   mPORTBClearBits(BIT_9);     
       play=0;
+      DmaChnDisable(1);
           DmaChnEnable(0);
     }    
         
@@ -607,9 +630,9 @@ void __ISR(_EXTERNAL_4_VECTOR, ipl5) INT4Interrupt() {
 }
 
 
-void __ISR(_EXTERNAL_2_VECTOR, ipl4) INT2Interrupt() {
+void __ISR(_EXTERNAL_1_VECTOR, ipl4) INT1Interrupt() {
     
-   mINT2ClearIntFlag();  
+   mINT1ClearIntFlag();  
     
     play=1;
     
@@ -711,19 +734,14 @@ void main(void) {
     tft_init_hw();
     tft_begin();
     tft_fillScreen(ILI9340_BLACK);
+    delay_ms(1000);
     //240x320 vertical display
     tft_setRotation(1); // Use tft_setRotation(1) for 320x240
 for(m= 1; m <= 20; m++) {
     bandData[m]=0;
 }
     
-PPSInput(1, INT4, RPB7);//RECORD
-ConfigINT4(EXT_INT_PRI_5 | RISING_EDGE_INT | EXT_INT_ENABLE);
-INTClearFlag(INT_INT4);
-    
-PPSInput(3, INT2, RPB13);//PLAY
-ConfigINT2(EXT_INT_PRI_4 | RISING_EDGE_INT | EXT_INT_ENABLE);
-INTClearFlag(INT_INT2);    
+  
     
      // === set up SPI =======================
   // SCK2 is pin 26 
@@ -733,21 +751,80 @@ INTClearFlag(INT_INT2);
   PPSInput(3,SDI2,RPA2);
 
   // control CS for RAM (bit 0) and for DAC (bit 1)
-  mPORTBSetPinsDigitalOut(BIT_8 | BIT_9);//RECORD LED PLAY LED
   mPORTASetPinsDigitalOut(BIT_4);
 
   //and set  both bits to turn off both enables
-  mPORTBClearBits(BIT_8 | BIT_9);
   mPORTASetBits(BIT_4);
   // divide Fpb by 2, configure the I/O ports. Not using SS in this example
   // 8 bit transfer CKP=1 CKE=1
   // possibles SPI_OPEN_CKP_HIGH;   SPI_OPEN_SMP_END;  SPI_OPEN_CKE_REV
   // For any given peripherial, you will need to match these
   SpiChnOpen(spiChn, SPI_OPEN_ON | SPI_OPEN_MODE8 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV , spiClkDiv);
-  PPSOutput(4, RPB10, SS2);
+ 
+  mPORTBSetPinsDigitalOut(BIT_10);
+
+  //and set  both bits to turn off both enables
+  mPORTBSetBits(BIT_10);  
+   Mode16_2();
+    mPORTAClearBits(BIT_4);
+    WriteSPI2(0x0140); // addr not greater than 17 bits
+    while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
+     ReadSPI2();
+     mPORTASetBits(BIT_4);
+     int i;
+   for (i = 0; i < 512; i++){
+         sin_table[i] = DAC_config_chan_A|(short)((2047*sin((float)i*6.283/(float)sine_table_size)+2047));
+     //  sin_table[i]=i;
+   }
+      /*
+      ram_write_byte_array(0,sin_table,50);    
+    delay_ms(10);
+    ram_read_byte_array(0,sin_table2,50);
+  //  int i;
+        for(i=0;i<nSamp;i++)
+ {sprintf(buffer, "%d  %d", sin_table[i],sin_table2[i]);
+        printLine(i+1, buffer, ILI9340_WHITE, ILI9340_BLACK);}
+    
+    while(1);   
+     
+     
+  char temp1[10]={1,8,7,6,3,6,4,3,5,1}, temp2[10];
+          ram_write_byte_array(0,temp1,5);    
+    ram_write_byte(0,1);
+    ram_write_byte(1,2);
+    ram_write_byte(2,3);
+    ram_write_byte(3,4);
+    ram_write_byte(4,5);
+    
+    
+      //    delay_ms(1000);
+    ram_read_byte_array(0, temp2,5);
+ //int i;
+        for(i=0;i<5;i++)
+ {sprintf(buffer, "%x\t\t%x", temp1[i],temp2[i]);
+        printLine(i+1, buffer, ILI9340_WHITE, ILI9340_BLACK);}
+ 
+    
+    ram_write_byte(0,5);
+    sprintf(buffer, "%d",ram_read_byte(0));
+        printLine(15, buffer, ILI9340_WHITE, ILI9340_BLACK);        
+   //while(1);
   
+  */
+  mPORTBSetPinsDigitalOut(BIT_8 | BIT_9);//RECORD LED PLAY LED
+  mPORTBClearBits(BIT_8 | BIT_9);
+
  mPORTBSetPinsDigitalIn(BIT_3);  //MODE SELECT
-//RPB10 CHIP SELECT FOR DAC
+PPSInput(1, INT4, RPB7);//RECORD
+ConfigINT4(EXT_INT_PRI_5 | FALLING_EDGE_INT | EXT_INT_ENABLE);
+INTClearFlag(INT_INT4);
+    
+PPSInput(4, INT1, RPA3);//PLAY
+ConfigINT1(EXT_INT_PRI_4 | FALLING_EDGE_INT | EXT_INT_ENABLE);
+INTClearFlag(INT_INT1);  
+      //int i;
+  
+     //RPB10 CHIP SELECT FOR DAC
 //RPA4  CHIP SELECT FOR RAM   
  // round-robin scheduler for threads
     while (1) {
@@ -755,4 +832,4 @@ INTClearFlag(INT_INT2);
     }
 } // main
 
-// === end  ======================================================
+// === end  ====================================================== b
