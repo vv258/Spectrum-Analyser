@@ -60,7 +60,9 @@ static struct pt pt_fft ;
 
 // system 1 second interval tick
 int sys_time_seconds ;
-
+int mel[22]={19,24,29,35,41,47,54,62,70,79,89,99,110,122,135,148,163,179,196,215,235,256};
+int m=0;
+int bandData[20];
 // === print line for TFT ============================================
 // print a line on the TFT
 // string buffer
@@ -193,7 +195,7 @@ static PT_THREAD (protothread_fft(struct pt *pt))
         
         // compute and display fft
         // load input array
-        for (sample_number=0; sample_number<nSamp-1; sample_number++){
+        for (sample_number=0; sample_number<nSamp; sample_number++){
             // window the input and perhaps scale it
             fr[sample_number] = multfix14(v_in[sample_number], window[sample_number]); 
             fi[sample_number] = 0 ;
@@ -206,7 +208,7 @@ static PT_THREAD (protothread_fft(struct pt *pt))
         //   |amplitude|=max(|Re|,|Im|)+0.4*min(|Re|,|Im|). 
         // This approximation is accurate within about 4% rms.
         // https://en.wikipedia.org/wiki/Alpha_max_plus_beta_min_algorithm
-        for (sample_number = 0; sample_number < nPixels; sample_number++) {  
+   /*     for (sample_number = 0; sample_number < nPixels; sample_number++) {  
             // get the approx magnitude
             fr[sample_number] = abs(fr[sample_number]); //>>9
             fi[sample_number] = abs(fi[sample_number]);
@@ -232,7 +234,7 @@ static PT_THREAD (protothread_fft(struct pt *pt))
             // bound the noise at low amp
             if(fr[sample_number]<log_min) fr[sample_number] = log_min;
         }
-        
+        */
         // timer 4 set up with prescalar=8, 
         // hence mult reading by 8 to get machine cycles
         sprintf(buffer, "FFT cycles %d", (ReadTimer4())*8);
@@ -250,7 +252,7 @@ static PT_THREAD (protothread_fft(struct pt *pt))
       */
         long place, root;
        
-        for (sample_number = 0; sample_number < nPixels; sample_number++) {
+        for (sample_number = 0; sample_number < nSamp; sample_number++) {
             fr[sample_number] = (fr[sample_number] * fr[sample_number] + 
                   fi[sample_number] * fi[sample_number]);
                    
@@ -276,9 +278,31 @@ static PT_THREAD (protothread_fft(struct pt *pt))
 				}
 			}
 			 fr[sample_number] = root;
-        tft_drawFastVLine(sample_number, 0,  220, ILI9340_BLACK);
-	    tft_drawFastVLine(sample_number, 0,  fr[sample_number], ILI9340_RED);
+            
+            
+        //tft_drawFastVLine(sample_number, 0,  220, ILI9340_BLACK);
+	    //tft_drawFastVLine(sample_number, 0,  fr[sample_number], ILI9340_RED);
         }
+      int startFreqIdx, centerFreqIdx, stopFreqIdx, magnitudeScale;   
+for(m= 1; m < =20; m++) {
+    startFreqIdx = mel[m-1];
+     centerFreqIdx = mel[m];
+     stopFreqIdx   = mel[m+1];
+bandData[m]=0;
+    for( sample_number = startFreqIdx; sample_number < centerFreqIdx; sample_number++){
+        magnitudeScale = centerFreqIdx-startFreqIdx;
+        bandData[m] += fr[sample_number]*(sample_number-startFreqIdx)/magnitudeScale;
+    }
+
+    for( sample_number = centerFreqIdx; sample_number <= stopFreqIdx; sample_number++) {
+        magnitudeScale = centerFreqIdx-stopFreqIdx;
+        bandData[m] += fr[sample_number]*(sample_number-stopFreqIdx)/magnitudeScale;
+    }
+    
+    tft_fillRect(0,m*16,  bandData[m],12,ILI9340_RED);
+    
+}
+        
       //  tft_fillRect(0,sample_number*5, fr[sample_number],8,ILI9340_RED);
        // 
         // NEVER exit while
@@ -307,7 +331,7 @@ void main(void) {
     // Set up timer3 on,  no interrupts, internal clock, prescalar 1, compare-value
     // This timer generates the time base for each ADC sample. 
     // works at ??? Hz
-    #define sample_rate 10000
+    #define sample_rate 8000
     // 40 MHz PB clock rate
     #define timer_match 40000000/sample_rate
     OpenTimer3(T3_ON | T3_SOURCE_INT | T3_PS_1_1, timer_match); 
