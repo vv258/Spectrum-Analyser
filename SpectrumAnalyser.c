@@ -52,12 +52,13 @@ typedef signed short fix14 ;
 #define nSamp 512
 #define nPixels 340
 fix14 v_in[nSamp] ;
-
+#define Filter_bank_size 22
 // === thread structures ============================================
 // thread control structs
 // note that UART input and output are threads
 static struct pt pt_fft ;
-
+static short x=0, y=0, ypow, ypow_1[Filter_bank_size], color;
+      static short color_index, display_phase ;
 // system 1 second interval tick
 int sys_time_seconds ;
 int mel[22]={19,24,29,35,41,47,54,62,70,79,89,99,110,122,135,148,163,179,196,215,235,256};
@@ -179,7 +180,7 @@ static PT_THREAD (protothread_fft(struct pt *pt))
     static fix14 zero_point_4 = float2fix14(0.4) ;
     // approx log calc ;
     static int sx, y, ly, temp ;
-    
+    display_phase = 0;
     while(1) {
         // yield time 1 second
         PT_YIELD_TIME_msec(30);
@@ -283,6 +284,9 @@ static PT_THREAD (protothread_fft(struct pt *pt))
         //tft_drawFastVLine(sample_number, 0,  220, ILI9340_BLACK);
 	    //tft_drawFastVLine(sample_number, 0,  fr[sample_number], ILI9340_RED);
         }
+        
+        
+ tft_fillRoundRect(x+1, 120*display_phase, 3, 100, 1, ILI9340_BLACK);// x,y,w,h,radius,color
       int startFreqIdx, centerFreqIdx, stopFreqIdx, magnitudeScale;   
 for(m= 1; m <= 20; m++) {
     startFreqIdx = mel[m-1];
@@ -301,14 +305,66 @@ bandData[m]=0;
         bandData[m] += fr[sample_number]*(sample_number-stopFreqIdx)/magnitudeScale;
     }
 
-
+/*
 if(prevbandData>bandData[m])
     tft_fillRect(m*16,bandData[m], 12,prevbandData-bandData[m],ILI9340_BLACK);
 else if(prevbandData<bandData[m])
     tft_fillRect(m*16,prevbandData, 12, bandData[m]-prevbandData,ILI9340_RED);
+    */
+
+
+color_index=bandData[m]>>3;
+        // draw spectrum 0-50 in y filter_out[i], ReadADC10(0)
+        // stepping x every time
     
-}
+            //tft_drawCircle(short x0, short y0, short r, unsigned short color);
+            //tft_drawCircle(y, ypos_1[y], 1, ILI9340_BLACK);
+           // color_index = bandData[m]>>3; //0 to 1024
+            
+            /*
+            if(ypow<10) color = ILI9340_BLUE ;
+            else if(ypow<20) color = ILI9340_GREEN ;
+            else if(ypow<50) color = ILI9340_YELLOW ;
+            else  color = ILI9340_RED ;
+              */
+            
+            // 
+          /*  if (ypow<2) color_index = 0;
+            else if (ypow<4) color_index = 0;
+            else if (ypow<8) color_index = 2;
+            else if (ypow<16) color_index = 4;
+            else if (ypow<32) color_index = 8;
+            else if (ypow<48) color_index = 12;
+            else if (ypow<64) color_index = 16 ;
+            else if (ypow<95) color_index = 20;
+            else if (ypow<128) color_index = 24;
+            else if (ypow<256) color_index = 26;
+            else if (ypow<512) color_index = 31;
+            else   color_index = 31;
+            */
+//5 6 5
+//3 2 3
+
+            //color = ((bandData[m] && 0xE0)<<8) | ((bandData[m]&& 0x18)<<6) | ((bandData[m]&& 0x7)<<2);
+           // color = (color_index<<11) | (color_index<<6) | (color_index) ;
+if(color_index< 10)
+    color=color_index;
+else if(color_index< 20)
+    color=(color_index<<6);
+else
+    color=(color_index<<11);
+            // */
+            tft_fillRoundRect(x,100+120*display_phase-(m<<2), 1, 3, 1, color);// x,y,w,h,radius,color
+            ypow_1[m] = ypow;
         
+        
+
+
+}
+      x++;
+        if (x>319) {x=0 ;display_phase = !display_phase ;
+        
+        }  
       //  tft_fillRect(0,sample_number*5, fr[sample_number],8,ILI9340_RED);
        // 
         // NEVER exit while
