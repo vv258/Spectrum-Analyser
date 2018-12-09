@@ -97,6 +97,164 @@ int color_map[32]={0x07F7,
 0xFAA0,
 0xFA00,
 0xF940};
+
+int record =0, play=0;
+int frame_count=0;
+
+// === SPI setup ========================================================
+volatile SpiChannel spiChn = SPI_CHANNEL2 ;	// the SPI channel to use
+volatile int spiClkDiv = 2 ; // 20 MHz max speed for this RAM
+//volatile int spiClkDiv = 4 ;
+
+// === RAM commands ======================================================
+// from 23LC1024 datasheet
+// http://ww1.microchip.com/downloads/en/DeviceDoc/20005142C.pdf
+// Default setup includes data streaming from current address
+// This is used in the array read/write functions
+#define RAM_WRITE_CMD (0x2000000) // top 8 bits -- 24 bits for address
+#define RAM_READ_CMD  (0x3000000) // top 8 bits -- 24 bits for address
+// command format consists of a read or write command ORed with a 24-bit
+// address, even though the actual address is never more than 17 bits
+// general procedure will be:
+// Drop chip-select line
+// Do a 32-bit SPI transfer with command ORed with address
+// switch to 8-bit SPI mode
+// Send one or more data bytes
+// Raise chip-select line
+//
+// At 20 MHz SPI bus rate:
+// Command ORed with address, plus mode change, takes 2.2 microsec
+// Each byte takes 0.75 microseconds 
+
+/* ====== MCP4822 control word =========================================
+bit 15 A/B: DACA or DACB Selection bit
+1 = Write to DACB
+0 = Write to DACA
+bit 14 ? Don?t Care
+bit 13 GA: Output Gain Selection bit
+1 = 1x (VOUT = VREF * D/4096)
+0 = 2x (VOUT = 2 * VREF * D/4096), where internal VREF = 2.048V.
+bit 12 SHDN: Output Shutdown Control bit
+1 = Active mode operation. VOUT is available. ?
+0 = Shutdown the selected DAC channel. Analog output is not available at the channel that was shut down.
+VOUT pin is connected to 500 k???typical)?
+bit 11-0 D11:D0: DAC Input Data bits. Bit x is ignored.
+*/
+// A-channel, 1x, active
+#define DAC_config_chan_A 0b0011000000000000
+
+// === spi bit widths ====================================================
+// hit the SPI control register directly
+inline void Mode16_2(void){  // configure SPI1 for 16-bit mode
+    SPI2CONSET = 0x400;
+    SPI2CONCLR = 0x800;
+}
+// ========
+inline void Mode8_2(void){  // configure SPI1 for 8-bit mode
+    SPI2CONCLR = 0x400;
+    SPI2CONCLR = 0x800;
+}
+// ========
+inline void Mode32_2(void){  // configure SPI1 for 8-bit mode
+    SPI2CONCLR = 0x400;
+    SPI2CONSET = 0x800;
+}
+// === DAC byte write =====================================================
+// address between 0 and 2^17-1
+// data bytes
+void dac_write_byte(int data){
+    int junk;
+    // Channel config ORed with data
+    Mode16_2();
+    mPORTBClearBits(BIT_1);
+    // write to spi2 and convert 8 bits to 12 bits
+    WriteSPI2(DAC_config_chan_A | (data));
+    // test for done
+    while (SPI2STATbits.SPIBUSY); // wait for end of transaction
+    junk = ReadSPI2(); // must always read, even if nothing useful is returned
+    // set 8-bit transfer for each byte
+    mPORTBSetBits(BIT_1);
+    return ;
+}
+
+// === RAM byte write =====================================================
+// address between 0 and 2^17-1
+// data bytes
+void ram_write_byte(int addr, char data){
+    int junk;
+    // set 32-bit transfer for read/write command ORed with
+    // actual address
+    Mode32_2();
+    mPORTAClearBits(BIT_4);
+    WriteSPI2(RAM_WRITE_CMD | addr); // addr not greater than 17 bits
+    while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
+    junk = ReadSPI2(); // must always read, even if nothing useful is returned
+    // set 8-bit transfer for each byte
+    Mode8_2();
+    WriteSPI2(data); // data write
+    while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
+    junk = ReadSPI2();
+    mPORTASetBits(BIT_4);
+    return ;
+}
+
+// === RAM array write =====================================================
+// address, pointer to an array containing the data, number of BYTES to store
+void ram_write_byte_array(int addr, char* data, int count){
+    int junk, i;
+    Mode32_2();
+    mPORTAClearBits(BIT_4);
+    WriteSPI2(RAM_WRITE_CMD | addr); // addr not greater than 17 bits
+    while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
+    junk = ReadSPI2();
+    Mode8_2();
+    for(i=0; i<count; i++){
+        WriteSPI2(data[i]); // data write
+        while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
+        junk = ReadSPI2();
+    }
+    mPORTASetBits(BIT_4);
+    return ;
+}
+
+// === RAM byte read ======================================================
+int ram_read_byte(int addr){
+    int junk, data;
+    Mode32_2();
+    mPORTAClearBits(BIT_4);
+    WriteSPI2(RAM_READ_CMD | addr); // addr not greater than 17 bits
+    while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
+    junk = ReadSPI2();
+    Mode8_2();
+    WriteSPI2(junk); // force the read
+    while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
+    data = ReadSPI2();
+    mPORTASetBits(BIT_4);
+    return data;
+}
+
+// === RAM array read ======================================================
+// address, pointer to an array receiving the data, number of BYTES to read
+int ram_read_byte_array(int addr, char* data, int count){
+    int junk, i;
+    Mode32_2();
+    mPORTAClearBits(BIT_4);
+    WriteSPI2(RAM_READ_CMD | addr); // addr not greater than 17 bits
+    while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
+    junk = ReadSPI2();
+    Mode8_2();
+    for(i=0; i<count; i++){
+        WriteSPI2(junk); // force the read
+        while (SPI2STATbits.SPIBUSY); // wait for it to end of transaction
+        data[i] = ReadSPI2();
+    }
+    mPORTASetBits(BIT_4);
+    return ;
+}
+
+
+
+
 // === print line for TFT ============================================
 // print a line on the TFT
 // string buffer
@@ -217,6 +375,8 @@ static PT_THREAD (protothread_fft(struct pt *pt))
     while(1) {
         // yield time 1 second
         PT_YIELD_TIME_msec(30);
+        
+        if(!play && !record){
         
         // enable ADC DMA channel and get
         // 512 samples from ADC
@@ -386,15 +546,76 @@ else if(prevbandData<bandData[m])
         }
 }
       
-if(mode) {  x++;
-        if (x>319) x=0 ;}
+if(mode) {  
+    x++;
+    if (x>319) x=0 ;
+}
  
- //  tft_fillRect(0,sample_number*5, fr[sample_number],8,ILI9340_RED);
-       // 
+        
+    }
+        
+    else if(record){
+
+        mPORTBSETBits(BIT_8);
+	for(frame_count=0;frame_count<80;frame_count++){
+    DmaChnEnable(0);
+        // yield until DMA done: while((DCH0CON & Chn_busy) ){};
+    PT_WAIT_WHILE(pt, DCH0CON & CHN_BUSY);
+    ram_write_byte_array(frame_count*512*2,v_in,512*2);    
+        
+    }    
+    mPORTBClearBits(BIT_8);    
+    record=0;    
+    }
+        
+    else if(play){
+          DmaChnDisable(0);
+                   mPORTBSETBits(BIT_9);
+
+	for(frame_count=0;frame_count<80;frame_count++){    
+        ram_read_byte_array(frame_count*512*2,v_in,512*2);
+        for(i=0;i<nSamp;i++)
+            v_in[i]=DAC_config_chan_A|(v_in[i]<<2);
+        SpiChnOpen(SPI_CHANNEL2, SPI_OPEN_ON | SPI_OPEN_MODE16 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV | SPICON_FRMEN | SPICON_FRMPOL, 2);
+        DmaChnOpen(1, 0, DMA_OPEN_DEFAULT);
+        DmaChnSetTxfer(1, (void*)v_in, &SPI2BUF2, nSamp*2, 2); //512 16-bit integers
+	    DmaChnSetEventControl(1, DMA_EV_START_IRQ(_TIMER_3_IRQ));
+        DmaChnSetEvEnableFlags(1, DMA_EV_BLOCK_DONE);	
+            PT_WAIT_UNTIL(pt,  DmaChnGetEvFlags(1));            
+        DmaChnClrEvFlags(1, DMA_EV_BLOCK_DONE);
+        SpiChnOpen(spiChn, SPI_OPEN_ON | SPI_OPEN_MODE8 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV , spiClkDiv);
+
+    }
+  mPORTBClearBits(BIT_9);     
+      play=0;
+          DmaChnEnable(0);
+    }    
+        
         // NEVER exit while
       } // END WHILE(1)
   PT_END(pt);
 } // FFT thread
+
+
+void __ISR(_EXTERNAL_4_VECTOR, ipl5) INT4Interrupt() {
+    
+   mINT4ClearIntFlag();  
+    
+    record=1;
+    
+    
+}
+
+
+void __ISR(_EXTERNAL_2_VECTOR, ipl4) INT2Interrupt() {
+    
+   mINT2ClearIntFlag();  
+    
+    play=1;
+    
+    
+}
+
 
 // === Main  ======================================================
 
@@ -495,8 +716,39 @@ void main(void) {
 for(m= 1; m <= 20; m++) {
     bandData[m]=0;
 }
- mPORTBSetPinsDigitalIn(BIT_3);  //MODE SELECT
+    
+PPSInput(1, INT4, RPB7);//RECORD
+ConfigINT4(EXT_INT_PRI_5 | RISING_EDGE_INT | EXT_INT_ENABLE);
+INTClearFlag(INT_INT4);
+    
+PPSInput(3, INT2, RPB13);//PLAY
+ConfigINT2(EXT_INT_PRI_4 | RISING_EDGE_INT | EXT_INT_ENABLE);
+INTClearFlag(INT_INT2);    
+    
+     // === set up SPI =======================
+  // SCK2 is pin 26 
+  // SDO2 (MOSI) is in PPS output group 2, could be connected to RPB5 which is pin 14
+  PPSOutput(2, RPB5, SDO2);
+  // SDI2 (MISO) is PPS output group 3, could be connected to RPA2 which is pin 9
+  PPSInput(3,SDI2,RPA2);
 
+  // control CS for RAM (bit 0) and for DAC (bit 1)
+  mPORTBSetPinsDigitalOut(BIT_8 | BIT_9);//RECORD LED PLAY LED
+  mPORTASetPinsDigitalOut(BIT_4);
+
+  //and set  both bits to turn off both enables
+  mPORTBClearBits(BIT_8 | BIT_9);
+  mPORTASetBits(BIT_4);
+  // divide Fpb by 2, configure the I/O ports. Not using SS in this example
+  // 8 bit transfer CKP=1 CKE=1
+  // possibles SPI_OPEN_CKP_HIGH;   SPI_OPEN_SMP_END;  SPI_OPEN_CKE_REV
+  // For any given peripherial, you will need to match these
+  SpiChnOpen(spiChn, SPI_OPEN_ON | SPI_OPEN_MODE8 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV , spiClkDiv);
+  PPSOutput(4, RPB10, SS2);
+  
+ mPORTBSetPinsDigitalIn(BIT_3);  //MODE SELECT
+//RPB10 CHIP SELECT FOR DAC
+//RPA4  CHIP SELECT FOR RAM   
  // round-robin scheduler for threads
     while (1) {
         PT_SCHEDULE(protothread_fft(&pt_fft));
