@@ -70,42 +70,44 @@ int sys_time_seconds ;
 //int mel[22]={19,24,29,35,41,47,54,62,70,79,89,99,110,122,135,148,163,179,196,215,235,256};
 int freq[22]={300,376,458,547,642,745,856,975,1103,1241,1389,1549,1721,1906,2105,2320,2551,2800,3067,3355,3666,4000};
 int mel[22]={4,6,7,8,10,11,13,15,17,19,22,24,27,30,33,37,40,44,49,53,58,64};
-
+int sound =0;
 int m=0;
 int bandData[20];
 int mode=0,prev_mode=0;
-int color_map[32]={0x07F7,
-0x07F5,
-0x07F2,
-0x07F0,
+int color_map[32]={
+0x07F7,
+//0x07F5,
+//0x07F2,
+//0x07F0,
 0x07ED,
-0x07EA,
-0x07E8,
-0x07E5,
-0x07E2,
+//0x07EA,
+//0x07E8,
+//0x07E5,
+//0x07E2,
 0x07E0,
-0x17E0,
-0x2FE0,
-0x47E0,
-0x57E0,
-0x6FE0,
-0x87E0,
+//0x17E0,
+//0x2FE0,
+//0x47E0,
+//0x57E0,
+//0x6FE0,
+//0x87E0,
 0x97E0,
-0xAFE0,
-0xBFE0,
-0xD7E0,
-0xEFE0,
-0xFFE0,
-0xFF40,
+//0xAFE0,
+//0xBFE0,
+//0xD7E0,
+//0xEFE0,
+//0xFFE0,
+//0xFF40,
 0xFEA0,
-0xFDE0,
-0xFD40,
-0xFCA0,
+//0xFDE0,
+//0xFD40,
+//0xFCA0,
 0xFC00,
-0xFB40,
-0xFAA0,
-0xFA00,
-0xF940};
+//0xFB40,
+//0xFAA0,
+//0xFA00,
+0xF940
+};
 
 int record =0, play=0;
 int frame_count=0;
@@ -518,8 +520,8 @@ static PT_THREAD (protothread_fft(struct pt *pt))
 
                 if(mode){
                     int m=0;
-                    for(m=0;m<32;m++)
-                    tft_fillRoundRect(305,225-(7*m), 15, 7, 1, color_map[m]);// x,y,w,h,radius,color
+                    for(m=0;m<7;m++)
+                    tft_fillRoundRect(305,210-(30*m), 15, 30, 1, color_map[m]);// x,y,w,h,radius,color
                     tft_setTextColor(ILI9340_WHITE); 
                     tft_setTextSize(1);
                     for(k=0;k<22;k++){
@@ -545,9 +547,13 @@ static PT_THREAD (protothread_fft(struct pt *pt))
         
         }
         if(mode){
- tft_fillRoundRect(x-1, 0, 3, 10, 1, ILI9340_BLACK);// x,y,w,h,radius,color
- tft_fillRoundRect(x, 0, 3, 10, 1, ILI9340_RED);// x,y,w,h,radius,color
-  tft_fillRoundRect(x+1, 20, 3, 240, 1, ILI9340_BLACK);// x,y,w,h,radius,color
+ tft_fillRoundRect(x-1, 120 *(!display_phase), 3, 10, 1, ILI9340_BLACK);// x,y,w,h,radius,color
+ tft_fillRoundRect(x, 120 *(!display_phase), 3, 10, 1, ILI9340_RED);// x,y,w,h,radius,color
+if(display_phase==0) 
+ tft_fillRoundRect(x+1, 130, 3, 225, 1, ILI9340_BLACK);// x,y,w,h,radius,color
+else
+ tft_fillRoundRect(x+1, 20, 3, 100, 1, ILI9340_BLACK);// x,y,w,h,radius,color
+
         }
       char str[128];
 int index = 0;  
@@ -571,24 +577,33 @@ bandData[m]=(temp1/(centerFreqIdx-startFreqIdx))+(temp2/(centerFreqIdx-stopFreqI
 /*
 
     */
- index += sprintf(&str[index], "%d, ", bandData[m]);
+ index += sprintf(&str[index], "%d,", bandData[m]<<2);
 if(mode){
-color_index=bandData[m]>>2;
+color_index=bandData[m];
         
-/*if(color_index< 10)
-    color=color_index;
-else if(color_index< 20)
-    color=(color_index<<6);
-else
-    color=(color_index<<11);
-            // */
-    
-    if(color_index<32)
-        color =color_map[color_index];
-    else
-    color =0xF800;
+ if(color_index< 2)
+    color=color_map[0];
+else if(color_index< 4)
+    color=color_map[1];
+else if(color_index< 8)
+    color=color_map[2];
+else if(color_index< 16)
+    color=color_map[3];
+else if(color_index< 32)
+    color=color_map[4];
+else if(color_index< 64)
+    color=color_map[5];
+else 
+    color=color_map[6];
+
+
+
            // tft_fillRoundRect(x,230-(10*m), 1, 10, 1, color);// x,y,w,h,radius,color
-             tft_drawFastVLine(x    , 230-(10*m)  ,10, color); // Left
+if(display_phase==0)
+tft_drawFastVLine(x    , 230-(5*m)  ,5, color); // 225 to 135
+else
+tft_drawFastVLine(x    , 120-(5*m)  ,5, color); // 115 to 25
+
 }
    
         
@@ -603,7 +618,7 @@ else if(prevbandData<bandData[m])
         
             tft_fillRect((m-1)*16+2,0, 12,205,ILI9340_BLACK);
       
-        tft_fillRect((m-1)*16+2,205-bandData[m], 12,bandData[m],ILI9340_RED);
+        tft_fillRect((m-1)*16+2,205-(bandData[m]<<2), 12,(bandData[m]<<2),ILI9340_RED);
        
         }
 
@@ -612,7 +627,7 @@ else if(prevbandData<bandData[m])
       
 if(mode) {  
     x++;
-    if (x>300) x=30 ;
+    if (x>300) {x=30 ;display_phase = !display_phase ;}
 }
  printval(str);
     }
@@ -668,9 +683,10 @@ refresh=1;
         ram_read_byte_array(frame_count*nSamp*2,(char *) v_in,nSamp*2);
       
         int i;
-        for(i=0;i<nSamp;i++)
-           // sprintf(buffer, "%x", v_in[i]);
-        v_in[i]=DAC_config_chan_A|(v_in[i]<<2);
+        for(i=0;i<nSamp;i++){
+   
+        v_in[i]=DAC_config_chan_A|(v_in[i]<<2); 
+        }
         SpiChnOpen(SPI_CHANNEL2, SPI_OPEN_ON | SPI_OPEN_MODE16 | SPI_OPEN_MSTEN | SPI_OPEN_CKE_REV | SPICON_FRMEN | SPICON_FRMPOL, 2);
           PPSOutput(4, RPB10, SS2);
 	
@@ -773,7 +789,8 @@ void main(void) {
 
     // define setup parameters for OpenADC10
     // set AN11 and  as analog inputs
-    #define PARAM4	ENABLE_AN11_ANA // pin 24
+   // #define PARAM4	ENABLE_AN11_ANA // pin 24
+    #define PARAM4	ENABLE_AN1_ANA // pin 24
 
     // define setup parameters for OpenADC10
     // do not assign channels to scan
@@ -781,7 +798,7 @@ void main(void) {
 
     // use ground as neg ref for A | use AN11 for input A     
     // configure to sample AN11 
-    SetChanADC10(ADC_CH0_NEG_SAMPLEA_NVREF | ADC_CH0_POS_SAMPLEA_AN11); // configure to sample AN4 
+    SetChanADC10(ADC_CH0_NEG_SAMPLEA_NVREF | ADC_CH0_POS_SAMPLEA_AN1); // configure to sample AN4 
     OpenADC10(PARAM1, PARAM2, PARAM3, PARAM4, PARAM5); // configure ADC using the parameters defined above
 
     EnableADC10(); // Enable the ADC
