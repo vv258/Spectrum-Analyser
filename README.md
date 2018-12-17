@@ -13,8 +13,7 @@ signal which is the first major stage in Speech recognition. Moreover, the
 serial interface can be used to connect the front end to further stages for
 processing.
 
-![](http://people.ece.cornell.edu/land/courses/ece4760/FinalProjects/f2018/vv2
-58_gsb85/vv258_gsb85/spectrum_analyser_files/highleveldesign.png)
+![](http://people.ece.cornell.edu/land/courses/ece4760/FinalProjects/f2018/vv258_gsb85/vv258_gsb85/spectrum_analyser_files/highleveldesign.png)
 
 #### Audio input
 
@@ -46,11 +45,9 @@ hanning window, which has a sinusoidal shape and touches zero at both ends.
 
 It is given by:
 
-![](http://people.ece.cornell.edu/land/courses/ece4760/FinalProjects/f2018/vv2
-58_gsb85/vv258_gsb85/spectrum_analyser_files/hanningformula.png)
+![](http://people.ece.cornell.edu/land/courses/ece4760/FinalProjects/f2018/vv258_gsb85/vv258_gsb85/spectrum_analyser_files/hanningformula.png)
 
-![](http://people.ece.cornell.edu/land/courses/ece4760/FinalProjects/f2018/vv2
-58_gsb85/vv258_gsb85/spectrum_analyser_files/hanningwindow.png)
+![](http://people.ece.cornell.edu/land/courses/ece4760/FinalProjects/f2018/vv258_gsb85/vv258_gsb85/spectrum_analyser_files/hanningwindow.png)
 
 The Fourier transform is a mathematical algorithm that converts a time domain
 signal into its frequency representation. The DFT is obtained by decomposing a
@@ -73,8 +70,7 @@ frequency. A PSD is computed by multiplying each frequency bin in an FFT by
 its complex conjugate which results in the real only spectrum of amplitude
 square.
 
-![](http://people.ece.cornell.edu/land/courses/ece4760/FinalProjects/f2018/vv2
-58_gsb85/vv258_gsb85/spectrum_analyser_files/powerspectrum.png)
+![](http://people.ece.cornell.edu/land/courses/ece4760/FinalProjects/f2018/vv258_gsb85/vv258_gsb85/spectrum_analyser_files/powerspectrum.png)
 
 The amplitude spectrum can be obtained by taking square root of this value.
 However, direct computation of square root is not efficient in the PIC32
@@ -88,9 +84,7 @@ to bin together the frequencies in a non linear manner. Then bins are narrower
 at lower frequencies and wider at high frequencies. This helps to visualize
 sound as perceived by the human ear.
 
-The formula for converting from frequency to Mel scale is: ![](http://people.e
-ce.cornell.edu/land/courses/ece4760/FinalProjects/f2018/vv258_gsb85/vv258_gsb8
-5/spectrum_analyser_files/melfilter.png)
+The formula for converting from frequency to Mel scale is: ![](http://people.ece.cornell.edu/land/courses/ece4760/FinalProjects/f2018/vv258_gsb85/vv258_gsb85/spectrum_analyser_files/melfilter.png)
 
 For speech signal the range of frequencies to be represented is chosen from
 300 Hz to 4000 Hz.
@@ -101,9 +95,7 @@ MEL frequency bins between the following points. 402 , 485 , 568 , 651 , 734 ,
 817 , 900 , 983 , 1066 , 1149 , 1232 , 1316 , 1399 , 1482 , 1565 , 1648 , 1731
 , 1814 , 1897 , 1980 , 2063 , 2146
 
-To go from Mels back to frequency: ![](http://people.ece.cornell.edu/land/cour
-ses/ece4760/FinalProjects/f2018/vv258_gsb85/vv258_gsb85/spectrum_analyser_file
-s/melfre.png)
+To go from Mels back to frequency: ![](http://people.ece.cornell.edu/land/courses/ece4760/FinalProjects/f2018/vv258_gsb85/vv258_gsb85/spectrum_analyser_files/melfre.png)
 
 This gives frequencies at: 300 , 376 , 459 , 547 , 643 , 746 , 856 , 975 ,
 1103 , 1241 , 1390 , 1549 , 1721 , 1907 , 2106 , 2320 , 2551 , 2800 , 3068 ,
@@ -116,9 +108,7 @@ with Number of samples (256) and diving by sample rate (16Khz). This gives:
 The first filterbank will start at the first point, reach its peak at the
 second point, then return to zero at the 3rd point. The second filterbank will
 start at the 2nd point, reach its max at the 3rd, then be zero at the 4th etc.
-A formula for calculating these is as follows: ![](http://people.ece.cornell.e
-du/land/courses/ece4760/FinalProjects/f2018/vv258_gsb85/vv258_gsb85/spectrum_a
-nalyser_files/fft.png)  
+A formula for calculating these is as follows: ![](http://people.ece.cornell.edu/land/courses/ece4760/FinalProjects/f2018/vv258_gsb85/vv258_gsb85/spectrum_analyser_files/fft.png)  
 where 'M' is the number of filters we want, and f() is the list of M+2 Mel-
 spaced frequencies.
 
@@ -128,3 +118,4 @@ optimization is very important. Algorithm selection was carried out by
 considering the hardware limitations in the microcontroller. In the above
 description, two such algorithms are used for efficient computation. 1. Fast
 Fourier Transform
+2\. Integer Square Root approximation
