@@ -1,20 +1,5 @@
  Spectrum Analyser      
 
-[![](./spectrum_analyser_files/cuseal_full_red.png)](http://people.ece.cornell.edu/land/courses/ece4760)
-
-[ECE 4760: Design with Microcontrollers](#zero)
-===============================================
-
-Final Design Project for Fall 2018
-
-*   [Introduction](#one)
-*   [High Level Design](#two)
-*   [Hardware Design](#three)
-*   [Software Design](#four)
-*   [Results](#five)
-*   [Conclusion](#six)
-*   [Appendix](#seven)
-
 Spectrum Analyser
 -----------------
 
@@ -26,7 +11,7 @@ Project Demo
 Introduction
 ------------
 
-The webpage describes the development of an Audio Spectrum Analyzer based on PIC32 microcontroller with the following features:
+The page describes the development of an Audio Spectrum Analyzer based on PIC32 microcontroller with the following features:
 
 *   Real time speech signal acquisition
 *   Spectrum and spectrograph visualization of Mel Frequency bands
@@ -340,17 +325,3 @@ IEEE Code of Ethics was strictly adhered to. Safety was given high priority. All
 *   [FFT and Spectrograph](http://people.ece.cornell.edu/land/courses/ece4760/PIC32/index_DSP.html)
 *   [ECE 4760 Course Website](http://people.ece.cornell.edu/land/courses/ece4760/)
 *   [Protothread](http://people.ece.cornell.edu/land/courses/ece4760/PIC32/index_Protothreads.html)
-*   [Webpage Theme](http://people.ece.cornell.edu/land/courses/ece4760/FinalProjects/f2017/rbr76_kr369/rbr76_kr369/rbr76_kr369/index.html)
-
-
-
-  
-  
-
-[](http://people.ece.cornell.edu/land/courses/ece4760/PIC32/index_Protothreads.html)
-
-[](http://people.ece.cornell.edu/land/courses/ece4760/PIC32/index_Protothreads.html)[© All rights reserved.](http://people.ece.cornell.edu/land/courses/ece4760/PIC32/index_Protothreads.html) [Design:](http://people.ece.cornell.edu/land/courses/ece4760/PIC32/index_Protothreads.html) [HTML5 UP](http://html5up.net/)
-
-[](#header)[ECE 4760: Designing with Microcontrollers](#zero)
-
-Save
