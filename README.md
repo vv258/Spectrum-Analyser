@@ -17,3 +17,5 @@ The system uses a microphone to pick up speech signal. The analog audio signal i
 
 ![Spectrum](https://github.com/vv258/Spectrum-Analyser/blob/master/images/3.png)
 ![Spectrograph](https://github.com/vv258/Spectrum-Analyser/blob/master/images/4.png)
+
+More Details at: [Hackster.io](https://www.hackster.io/128264/spectrum-analyzer-c32962 "Spectrum Analyser")
